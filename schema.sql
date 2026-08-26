@@ -186,19 +186,20 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- grava histórico sempre que o preço de um material muda
+-- (AFTER, não BEFORE: a linha em materials já precisa existir de verdade
+-- antes de gravar a referência em material_price_history, senão a FK falha)
 create or replace function public.log_material_price_change()
 returns trigger language plpgsql as $$
 begin
   if (tg_op = 'INSERT') or (new.price is distinct from old.price) then
     insert into public.material_price_history (material_id, price) values (new.id, new.price);
   end if;
-  new.updated_at = now();
   return new;
 end;
 $$;
 
 create trigger materials_price_history
-  before insert or update on public.materials
+  after insert or update on public.materials
   for each row execute function public.log_material_price_change();
 
 create or replace function public.touch_updated_at()
@@ -208,6 +209,10 @@ begin
   return new;
 end;
 $$;
+
+create trigger materials_touch
+  before update on public.materials
+  for each row execute function public.touch_updated_at();
 
 create trigger products_touch
   before update on public.products
