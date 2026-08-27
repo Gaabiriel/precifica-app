@@ -1,8 +1,8 @@
-import React, { useState } from "react";
-import { Factory } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Tag } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { Button, Field, inputStyle } from "../components/ui.jsx";
-import { FALLBACK_THEME, SIGNUP_NICHES } from "../theme";
+import { FALLBACK_THEME } from "../theme";
 
 export default function Login() {
   const theme = FALLBACK_THEME;
@@ -10,10 +10,18 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [nicheSlug, setNicheSlug] = useState("bolsas");
+  const [niches, setNiches] = useState([]);
+  const [nicheSlug, setNicheSlug] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.from("niches").select("slug, name").order("name").then(({ data }) => {
+      setNiches(data || []);
+      if (data?.length) setNicheSlug((s) => s || data[0].slug);
+    });
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -39,13 +47,13 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: theme.bg, fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 380, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 28 }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: theme.bg, fontFamily: "'Manrope', sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 380, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 28 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: theme.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-            <Factory size={19} />
+          <div style={{ width: 36, height: 36, borderRadius: 8, background: theme.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+            <Tag size={18} />
           </div>
-          <div style={{ fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 700 }}>Precifica</div>
+          <div style={{ fontSize: 19, fontWeight: 800 }}>Precifica</div>
         </div>
 
         <div style={{ display: "flex", gap: 4, marginBottom: 18, background: theme.surfaceAlt, borderRadius: 10, padding: 4 }}>
@@ -68,7 +76,7 @@ export default function Login() {
               </Field>
               <Field label="Tipo de negócio" hint="Isso define o tema e os campos do seu app">
                 <select style={inputStyle(theme)} value={nicheSlug} onChange={(e) => setNicheSlug(e.target.value)}>
-                  {SIGNUP_NICHES.map((n) => <option key={n.slug} value={n.slug}>{n.name}</option>)}
+                  {niches.map((n) => <option key={n.slug} value={n.slug}>{n.name}</option>)}
                 </select>
               </Field>
             </>

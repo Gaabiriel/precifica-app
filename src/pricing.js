@@ -79,3 +79,27 @@ export function computeProductCost(product, materials, products, settings) {
     profit, realMarginPercent,
   };
 }
+
+/** Chave "AAAA-MM" (fuso local) usada pra agrupar produção/relatórios por mês. */
+export function monthKey(d) {
+  const date = new Date(d);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Valor (custo/preço/lucro) de uma linha de production_log. Usa o
+ * cost_snapshot gravado no momento da produção quando existir; senão,
+ * calcula com os preços/custos atuais como aproximação (produções antigas,
+ * de antes do snapshot existir).
+ */
+export function productionLogValue(log, product, materials, products, settings) {
+  if (log.cost_snapshot && typeof log.cost_snapshot.profit === "number") {
+    const { subtotal = 0, finalPrice = 0, profit = 0 } = log.cost_snapshot;
+    return { subtotal, finalPrice, profit };
+  }
+  if (product) {
+    const calc = computeProductCost(product, materials, products, settings);
+    return { subtotal: calc.subtotal, finalPrice: calc.finalPrice, profit: calc.profit };
+  }
+  return { subtotal: 0, finalPrice: 0, profit: 0 };
+}

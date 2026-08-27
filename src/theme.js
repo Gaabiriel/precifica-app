@@ -4,10 +4,73 @@ export const FALLBACK_THEME = {
   text: "#242927", textMuted: "#75837F", danger: "#B0524A", good: "#3F5E58",
 };
 
-// Usado somente na tela de cadastro, antes de o usuário ter perfil —
-// espelha o campo `theme` (jsonb) de cada linha da tabela `niches`.
-export const SIGNUP_NICHES = [
-  { slug: "bolsas", name: "Ateliê de Bolsas & Acessórios" },
-  { slug: "doces", name: "Confeitaria & Doces Finos" },
-  { slug: "generico", name: "Outro nicho" },
-];
+/* -------------------------------------------------------------------------
+ * Gerador de paleta por nicho: o admin escolhe só a cor principal, e o
+ * resto da paleta é derivado dela — mantém o padrão "sóbrio, sem cores
+ * fortes" do projeto sem depender de a pessoa acertar 10 cores na mão.
+ * ---------------------------------------------------------------------- */
+
+function hexToHsl(hex) {
+  const m = hex.replace("#", "");
+  const r = parseInt(m.substring(0, 2), 16) / 255;
+  const g = parseInt(m.substring(2, 4), 16) / 255;
+  const b = parseInt(m.substring(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s;
+  const l = (max + min) / 2;
+  if (max === min) { h = 0; s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4;
+    }
+    h *= 60;
+  }
+  return { h, s: s * 100, l: l * 100 };
+}
+
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  s = Math.min(100, Math.max(0, s)) / 100;
+  l = Math.min(100, Math.max(0, l)) / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  const toHex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+/** Gera a paleta completa de um nicho a partir de uma única cor principal. */
+export function generateNicheTheme(primaryHex) {
+  const primaryHsl = hexToHsl(primaryHex);
+  const h = primaryHsl.h;
+  const primaryS = Math.min(primaryHsl.s, 55);
+  const primaryL = Math.min(Math.max(primaryHsl.l, 28), 42);
+
+  return {
+    bg: hslToHex(h, 16, 96.5),
+    surface: "#FFFFFF",
+    surfaceAlt: hslToHex(h, 22, 90.5),
+    border: hslToHex(h, 24, 85),
+    primary: hslToHex(h, primaryS, primaryL),
+    primarySoft: hslToHex(h, 38, 88),
+    accent: hslToHex(h, Math.min(primaryS + 12, 60), Math.min(primaryL + 10, 55)),
+    text: hslToHex(h, 16, 16),
+    textMuted: hslToHex(h, 12, 47),
+    danger: hslToHex(6, 45, 50),
+    good: hslToHex(120, 22, 40),
+  };
+}
+
+export function slugify(name) {
+  return name
+    .normalize("NFD").replace(new RegExp("[̀-ͯ]", "g"), "")
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}

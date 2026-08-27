@@ -10,7 +10,7 @@ export default function SettingsPage({ theme, settings, onSave }) {
   return (
     <div>
       <Card theme={theme} style={{ padding: 24 }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Parâmetros de precificação</div>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Parâmetros de precificação</div>
         <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 20 }}>Esses valores entram automaticamente no cálculo de custo de todos os produtos.</div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "4px 20px" }}>

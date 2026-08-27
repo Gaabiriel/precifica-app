@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, Factory, ArrowUpDown, Upload, X, Lock } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock } from "lucide-react";
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
@@ -13,16 +13,15 @@ const SORT_OPTIONS = [
   { value: "subtotal", label: "Custo" },
   { value: "finalPrice", label: "Preço de venda" },
   { value: "realMarginPercent", label: "Margem real" },
-  { value: "produced_count", label: "Produzidos" },
 ];
 
-export default function Products({ theme, products, materials, settings, onSave, onDelete, onProduce, maxProducts }) {
+export default function Kits({ theme, products, materials, settings, onSave, onDelete, maxProducts }) {
+  const kits = useMemo(() => products.filter((p) => p.is_kit), [products]);
+
   const [modal, setModal] = useState(null);
-  const [produceModal, setProduceModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showLimitInfo, setShowLimitInfo] = useState(false);
   const atLimit = maxProducts != null && products.length >= maxProducts;
-  const simpleProducts = useMemo(() => products.filter((p) => !p.is_kit), [products]);
   const [q, setQ] = useState("");
   const [sortField, setSortField] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
@@ -46,22 +45,22 @@ export default function Products({ theme, products, materials, settings, onSave,
 
   const PAGE_SIZE = columns * ROWS_PER_PAGE;
 
-  const productCosts = useMemo(
-    () => simpleProducts.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })),
-    [simpleProducts, materials, products, settings]
+  const kitCosts = useMemo(
+    () => kits.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })),
+    [kits, materials, products, settings]
   );
 
   const filteredSorted = useMemo(() => {
-    let list = productCosts.filter(({ product }) => product.name.toLowerCase().includes(q.toLowerCase()));
+    let list = kitCosts.filter(({ product }) => product.name.toLowerCase().includes(q.toLowerCase()));
     const dir = sortDir === "asc" ? 1 : -1;
     list = [...list].sort((a, b) => {
-      const va = sortField === "name" ? a.product.name : sortField === "produced_count" ? (a.product.produced_count || 0) : a.calc[sortField];
-      const vb = sortField === "name" ? b.product.name : sortField === "produced_count" ? (b.product.produced_count || 0) : b.calc[sortField];
+      const va = sortField === "name" ? a.product.name : a.calc[sortField];
+      const vb = sortField === "name" ? b.product.name : b.calc[sortField];
       if (typeof va === "string") return va.localeCompare(vb) * dir;
       return ((va || 0) - (vb || 0)) * dir;
     });
     return list;
-  }, [productCosts, q, sortField, sortDir]);
+  }, [kitCosts, q, sortField, sortDir]);
 
   useEffect(() => { setPage(1); }, [q, sortField, sortDir, PAGE_SIZE]);
 
@@ -71,9 +70,14 @@ export default function Products({ theme, products, materials, settings, onSave,
 
   return (
     <div>
+      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 16, lineHeight: 1.5, maxWidth: 640 }}>
+        Um kit reúne produtos que você já cadastrou (ex.: "Kit Viagem" = Necessaire + Bolsa de Praia).
+        O preço soma o custo desses produtos — não o preço de venda deles — pra não cobrar margem duas vezes.
+      </div>
+
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: 1 }}>
-          <input className="toolbar-field" placeholder="Buscar produto…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 220 }} />
+          <input className="toolbar-field" placeholder="Buscar kit…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 220 }} />
           <div className="toolbar-field" style={{ display: "flex", gap: 8, maxWidth: 204 }}>
             <select value={sortField} onChange={(e) => setSortField(e.target.value)} style={{ ...inputStyle(theme), flex: 1 }}>
               {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>Ordenar: {o.label}</option>)}
@@ -84,13 +88,13 @@ export default function Products({ theme, products, materials, settings, onSave,
           </div>
         </div>
         <Button className="products-new-btn" theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
-          {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo produto
+          {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo kit
         </Button>
       </div>
 
       {filteredSorted.length > 0 && (
         <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>
-          Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredSorted.length)} de {filteredSorted.length} produtos
+          Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredSorted.length)} de {filteredSorted.length} kits
         </div>
       )}
 
@@ -102,46 +106,43 @@ export default function Products({ theme, products, materials, settings, onSave,
             </div>
             <div style={{ padding: "4px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>{product.name}</div>
-              <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>Produzido: {product.produced_count || 0} un.</div>
+              <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
+                {(product.kitItems || []).length} {(product.kitItems || []).length === 1 ? "produto" : "produtos"} no kit
+              </div>
               <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} />
               <Row theme={theme} label="Preço de venda" value={brl(calc.finalPrice)} bold />
               <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={theme.good} />
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto", paddingTop: 12 }}>
-                <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setProduceModal(product)}>
-                  <Factory size={13} /> Produzir
+                <Button theme={theme} variant="ghost" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setModal(product)}>
+                  <Pencil size={13} /> Editar
                 </Button>
-                <button onClick={() => setModal(product)} style={iconBtn(theme)}><Pencil size={14} /></button>
                 <button onClick={() => setDeleteTarget(product)} style={iconBtn(theme)}><Trash2 size={14} /></button>
               </div>
             </div>
           </Card>
         ))}
       </div>
-      {simpleProducts.length === 0 && (
+      {kits.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: theme.textMuted, fontSize: 13.5 }}>
-          Nenhum produto ainda. Clique em "Novo produto" e monte a ficha técnica.
+          Nenhum kit ainda. Clique em "Novo kit" pra combinar produtos que você já cadastrou.
         </div>
       )}
-      {simpleProducts.length > 0 && filteredSorted.length === 0 && (
+      {kits.length > 0 && filteredSorted.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: theme.textMuted, fontSize: 13.5 }}>
-          Nenhum produto encontrado com esses filtros.
+          Nenhum kit encontrado com essa busca.
         </div>
       )}
 
       <Pagination theme={theme} page={currentPage} totalPages={totalPages} onChange={setPage} />
 
       {modal && (
-        <ProductModal theme={theme} product={modal} materials={materials} products={products} settings={settings}
-          onClose={() => setModal(null)} onSave={(p) => { onSave(p); setModal(null); }} />
-      )}
-      {produceModal && (
-        <ProduceModal theme={theme} product={produceModal} onClose={() => setProduceModal(null)}
-          onConfirm={(p, qty) => { onProduce(p, qty); setProduceModal(null); }} />
+        <KitModal theme={theme} kit={modal} materials={materials} products={products} settings={settings}
+          onClose={() => setModal(null)} onSave={(k) => { onSave(k); setModal(null); }} />
       )}
       {deleteTarget && (
         <ConfirmModal
           theme={theme}
-          message={`Tem certeza que quer excluir "${deleteTarget.name}"? Essa ação não pode ser desfeita.`}
+          message={`Tem certeza que quer excluir o kit "${deleteTarget.name}"? Essa ação não pode ser desfeita.`}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => { onDelete(deleteTarget.id); setDeleteTarget(null); }}
         />
@@ -149,7 +150,7 @@ export default function Products({ theme, products, materials, settings, onSave,
       {showLimitInfo && (
         <Modal theme={theme} title="Limite do plano atingido" onClose={() => setShowLimitInfo(false)} width={380}>
           <div style={{ fontSize: 13.5, color: theme.textMuted, lineHeight: 1.6, marginBottom: 18 }}>
-            Seu plano atual permite até <strong style={{ color: theme.text }}>{maxProducts}</strong> produtos cadastrados.
+            Seu plano atual permite até <strong style={{ color: theme.text }}>{maxProducts}</strong> produtos cadastrados (produtos e kits juntos).
             Para cadastrar mais, é preciso migrar para um plano com limite maior.
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -161,12 +162,12 @@ export default function Products({ theme, products, materials, settings, onSave,
   );
 }
 
-function ProductModal({ theme, product, materials, products, settings, onClose, onSave }) {
+function KitModal({ theme, kit, materials, products, settings, onClose, onSave }) {
   const [form, setForm] = useState({
-    name: "", image_urls: [], labor_minutes: 30, notes: "", is_kit: false,
+    name: "", image_urls: [], labor_minutes: 0, is_kit: true,
     bom: [], kitItems: [], margin_percent: settings.default_margin_percent, sale_price_override: null,
-    ...product,
-    is_kit: false,
+    ...kit,
+    is_kit: true,
   });
   const [uploading, setUploading] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -192,27 +193,24 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
   };
   const removeImage = (idx) => set("image_urls", (form.image_urls || []).filter((_, i) => i !== idx));
 
+  const otherProducts = products.filter((p) => p.id !== kit.id && !p.is_kit);
+  const addKitLine = () => otherProducts.length && set("kitItems", [...(form.kitItems || []), { item_product_id: otherProducts[0].id, qty: 1 }]);
+  const updateKitLine = (idx, patch) => set("kitItems", form.kitItems.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  const removeKitLine = (idx) => set("kitItems", form.kitItems.filter((_, i) => i !== idx));
+
   const addBomLine = () => materials.length && set("bom", [...(form.bom || []), { material_id: materials[0].id, qty: 1 }]);
   const updateBomLine = (idx, patch) => set("bom", form.bom.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   const removeBomLine = (idx) => set("bom", form.bom.filter((_, i) => i !== idx));
 
   return (
-    <Modal theme={theme} title={product.id ? "Editar produto" : "Novo produto"} onClose={onClose} width={640}>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ flex: "2 1 200px" }}>
-          <Field label="Nome do produto">
-            <input style={inputStyle(theme)} value={form.name} onChange={(e) => set("name", e.target.value)} />
-          </Field>
-        </div>
-        <div style={{ flex: "1 1 140px" }}>
-          <Field label="Tempo de produção (min)">
-            <input type="number" style={inputStyle(theme)} value={form.labor_minutes} onChange={(e) => set("labor_minutes", parseFloat(e.target.value) || 0)} />
-          </Field>
-        </div>
-      </div>
+    <Modal theme={theme} title={kit.id ? "Editar kit" : "Novo kit"} onClose={onClose} width={640}>
+      <Field label="Nome do kit">
+        <input style={inputStyle(theme)} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Ex: Kit Viagem" />
+      </Field>
+
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 5, opacity: 0.75 }}>
-          Fotos do produto ({(form.image_urls || []).length}/{MAX_IMAGES})
+          Fotos do kit ({(form.image_urls || []).length}/{MAX_IMAGES})
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {(form.image_urls || []).map((url, idx) => (
@@ -230,10 +228,27 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
             </label>
           )}
         </div>
-        <div style={{ fontSize: 11, opacity: 0.55, marginTop: 3 }}>A primeira foto aparece como capa na listagem.</div>
       </div>
 
-      <div style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", opacity: 0.6, margin: "0 0 8px" }}>Ficha técnica (materiais usados)</div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", opacity: 0.6, margin: "0 0 8px" }}>Produtos que compõem o kit</div>
+      {otherProducts.length === 0 && (
+        <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
+          Você ainda não tem produtos simples cadastrados. Cadastre-os na aba Produtos primeiro.
+        </div>
+      )}
+      {(form.kitItems || []).map((line, idx) => (
+        <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+          <select style={{ ...inputStyle(theme), flex: 2 }} value={line.item_product_id} onChange={(e) => updateKitLine(idx, { item_product_id: e.target.value })}>
+            {otherProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input type="number" style={{ ...inputStyle(theme), flex: 1 }} value={line.qty} onChange={(e) => updateKitLine(idx, { qty: parseFloat(e.target.value) || 0 })} />
+          <button onClick={() => removeKitLine(idx)} style={iconBtn(theme)}><Trash2 size={13} /></button>
+        </div>
+      ))}
+      <Button theme={theme} variant="ghost" onClick={addKitLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar produto ao kit</Button>
+
+      <div style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", opacity: 0.6, margin: "0 0 8px" }}>Materiais extras do kit (opcional)</div>
+      <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>Ex.: embalagem específica do kit, laço, cartão — algo que não faz parte de nenhum produto individual.</div>
       {(form.bom || []).map((line, idx) => {
         const mat = materials.find((m) => m.id === line.material_id);
         return (
@@ -248,7 +263,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
           </div>
         );
       })}
-      <Button theme={theme} variant="ghost" onClick={addBomLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar material</Button>
+      <Button theme={theme} variant="ghost" onClick={addBomLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar material extra</Button>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 160px" }}>
@@ -264,9 +279,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
       </div>
 
       <Card theme={theme} style={{ padding: 14, background: theme.surfaceAlt, border: "none", marginTop: 4 }}>
-        <Row theme={theme} label="Custo de materiais / componentes" value={brl(calc.materialsCost)} />
-        <Row theme={theme} label="Mão de obra" value={brl(calc.laborCost)} />
-        <Row theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)} />
+        <Row theme={theme} label="Custo dos produtos + materiais extras" value={brl(calc.materialsCost)} />
         <Row theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)} />
         <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
         <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold />
@@ -276,22 +289,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button theme={theme} onClick={() => form.name.trim() && onSave(form)}>Salvar produto</Button>
-      </div>
-    </Modal>
-  );
-}
-
-function ProduceModal({ theme, product, onClose, onConfirm }) {
-  const [qty, setQty] = useState(1);
-  return (
-    <Modal theme={theme} title={`Registrar produção — ${product.name}`} onClose={onClose} width={360}>
-      <Field label="Quantidade produzida" hint="O estoque de materiais será descontado automaticamente">
-        <input type="number" min={1} style={inputStyle(theme)} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} />
-      </Field>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
-        <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button theme={theme} onClick={() => onConfirm(product, qty)}><Factory size={14} /> Confirmar</Button>
+        <Button theme={theme} onClick={() => form.name.trim() && onSave(form)}>Salvar kit</Button>
       </div>
     </Modal>
   );

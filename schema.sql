@@ -74,7 +74,8 @@ create table public.materials (
   min_stock numeric not null default 0,
   waste_percent numeric not null default 0,   -- % de perda (sobra de corte etc.)
   supplier text,
-  image_url text,
+  image_url text,                    -- legado; ver image_urls abaixo
+  image_urls text[] not null default '{}'::text[],  -- até 5 fotos (Supabase Storage)
   reference_measure text,            -- texto livre vindo da planilha original
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -97,7 +98,8 @@ create table public.products (
   owner_id uuid not null references public.profiles(id) on delete cascade,
   niche_id uuid references public.niches(id),
   name text not null,
-  image_url text,
+  image_url text,                    -- legado; ver image_urls abaixo
+  image_urls text[] not null default '{}'::text[],  -- até 5 fotos (Supabase Storage)
   labor_minutes numeric not null default 0,
   notes text,
   dimensions text,
@@ -148,6 +150,7 @@ create table public.quotes (
   items jsonb not null default '[]'::jsonb,   -- [{product_id, name, qty, unit_price}]
   total numeric not null default 0,
   notes text,
+  valid_until date,
   created_at timestamptz not null default now()
 );
 
@@ -233,8 +236,9 @@ alter table public.product_kit_items enable row level security;
 alter table public.production_log enable row level security;
 alter table public.quotes enable row level security;
 
--- niches / plans: qualquer usuário autenticado lê; só admin escreve
-create policy "niches_select" on public.niches for select using (auth.role() = 'authenticated');
+-- niches: leitura pública (a tela de cadastro, antes do login, precisa listar
+-- os nichos disponíveis); plans: só autenticado lê. Escrita só admin em ambas.
+create policy "niches_select" on public.niches for select using (true);
 create policy "niches_admin_write" on public.niches for all using (public.is_admin()) with check (public.is_admin());
 
 create policy "plans_select" on public.subscription_plans for select using (auth.role() = 'authenticated');
@@ -245,40 +249,60 @@ create policy "profiles_self_select" on public.profiles for select using (id = a
 create policy "profiles_self_update" on public.profiles for update using (id = auth.uid() or public.is_admin());
 create policy "profiles_admin_insert" on public.profiles for insert with check (public.is_admin() or id = auth.uid());
 
--- settings
+-- settings: cada usuário só vê/edita o próprio, inclusive admin — o painel
+-- Admin gerencia perfis/planos/nichos, não os dados de negócio de outros.
 create policy "settings_owner" on public.settings for all
-  using (owner_id = auth.uid() or public.is_admin())
-  with check (owner_id = auth.uid() or public.is_admin());
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
 
 -- materials
 create policy "materials_owner" on public.materials for all
-  using (owner_id = auth.uid() or public.is_admin())
-  with check (owner_id = auth.uid() or public.is_admin());
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
 
 create policy "price_history_owner" on public.material_price_history for select
-  using (exists(select 1 from public.materials m where m.id = material_id and (m.owner_id = auth.uid() or public.is_admin())));
+  using (exists(select 1 from public.materials m where m.id = material_id and m.owner_id = auth.uid()));
 
 -- products
 create policy "products_owner" on public.products for all
-  using (owner_id = auth.uid() or public.is_admin())
-  with check (owner_id = auth.uid() or public.is_admin());
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
 
 create policy "product_materials_owner" on public.product_materials for all
-  using (exists(select 1 from public.products p where p.id = product_id and (p.owner_id = auth.uid() or public.is_admin())))
-  with check (exists(select 1 from public.products p where p.id = product_id and (p.owner_id = auth.uid() or public.is_admin())));
+  using (exists(select 1 from public.products p where p.id = product_id and p.owner_id = auth.uid()))
+  with check (exists(select 1 from public.products p where p.id = product_id and p.owner_id = auth.uid()));
 
 create policy "kit_items_owner" on public.product_kit_items for all
-  using (exists(select 1 from public.products p where p.id = kit_product_id and (p.owner_id = auth.uid() or public.is_admin())))
-  with check (exists(select 1 from public.products p where p.id = kit_product_id and (p.owner_id = auth.uid() or public.is_admin())));
+  using (exists(select 1 from public.products p where p.id = kit_product_id and p.owner_id = auth.uid()))
+  with check (exists(select 1 from public.products p where p.id = kit_product_id and p.owner_id = auth.uid()));
 
 -- production log / quotes
 create policy "production_owner" on public.production_log for all
-  using (owner_id = auth.uid() or public.is_admin())
-  with check (owner_id = auth.uid() or public.is_admin());
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
 
 create policy "quotes_owner" on public.quotes for all
-  using (owner_id = auth.uid() or public.is_admin())
-  with check (owner_id = auth.uid() or public.is_admin());
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+-- ============================================================================
+-- STORAGE — bucket para fotos de produto (até 5 por produto)
+-- ============================================================================
+insert into storage.buckets (id, name, public)
+values ('product-images', 'product-images', true)
+on conflict (id) do nothing;
+
+create policy "product_images_public_read" on storage.objects for select
+  using (bucket_id = 'product-images');
+
+create policy "product_images_owner_write" on storage.objects for insert
+  with check (bucket_id = 'product-images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "product_images_owner_update" on storage.objects for update
+  using (bucket_id = 'product-images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "product_images_owner_delete" on storage.objects for delete
+  using (bucket_id = 'product-images' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ============================================================================
 -- SEED — nichos e planos padrão
