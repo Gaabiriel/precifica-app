@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ShieldCheck, Plus, Pencil, Trash2 } from "lucide-react";
-import { Card, Button, Field, inputStyle, Modal, ConfirmModal, ActionsMenu } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu } from "../components/ui.jsx";
 import { generateNicheTheme, slugify } from "../theme";
 import { supabase } from "../supabaseClient";
 
@@ -103,7 +103,7 @@ export default function Admin({ theme }) {
               <span style={{ color: theme.textMuted }}>{planName}</span>
               <Chip theme={theme} tone={STATUS_TONES[p.subscription_status]?.(theme) || theme.textMuted}>{STATUS_LABELS[p.subscription_status] || p.subscription_status}</Chip>
               <Chip theme={theme} tone={p.role === "admin" ? theme.primary : theme.textMuted}>{p.role === "admin" ? "Admin" : "Usuário"}</Chip>
-              <ActionsMenu theme={theme} actions={[{ label: "Editar", icon: Pencil, onClick: () => setUserModal(p) }]} />
+              <button onClick={() => setUserModal(p)} style={iconBtn(theme)} title="Editar"><Pencil size={14} /></button>
             </div>
           );
         })}
@@ -166,13 +166,19 @@ export default function Admin({ theme }) {
               <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.name}</span>
               <span style={{ color: theme.textMuted, fontSize: 11.5, flexShrink: 0 }}>{n.slug}</span>
             </div>
-            <ActionsMenu
-              theme={theme}
-              actions={[
-                { label: "Editar", icon: Pencil, onClick: () => { setNicheError(""); setNicheModal(n); } },
-                { label: "Excluir", icon: Trash2, danger: true, onClick: () => { setNicheError(""); setNicheDeleteTarget(n); } },
-              ]}
-            />
+            <div className="desktop-only-actions" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button onClick={() => { setNicheError(""); setNicheModal(n); }} style={iconBtn(theme)} title="Editar"><Pencil size={14} /></button>
+              <button onClick={() => { setNicheError(""); setNicheDeleteTarget(n); }} style={iconBtn(theme)} title="Excluir"><Trash2 size={14} /></button>
+            </div>
+            <div className="mobile-only-actions">
+              <ActionsMenu
+                theme={theme}
+                actions={[
+                  { label: "Editar", icon: Pencil, onClick: () => { setNicheError(""); setNicheModal(n); } },
+                  { label: "Excluir", icon: Trash2, danger: true, onClick: () => { setNicheError(""); setNicheDeleteTarget(n); } },
+                ]}
+              />
+            </div>
           </div>
         ))}
         {niches.length === 0 && <div style={{ padding: 24, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>Nenhum nicho cadastrado ainda.</div>}

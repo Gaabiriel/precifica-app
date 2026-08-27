@@ -17,6 +17,7 @@
       .materials-card-view { display: none; }
       .quotes-card-view { display: none; }
       .admin-users-card-view { display: none; }
+      .mobile-only-actions { display: none; }
 
       @media (max-width: 640px) {
         .materials-table-view { display: none !important; }
@@ -27,6 +28,8 @@
         .admin-users-card-view { display: flex !important; }
         .toolbar-field { max-width: none !important; flex: 1 1 100% !important; }
         .products-new-btn { width: 100% !important; justify-content: center !important; }
+        .desktop-only-actions { display: none !important; }
+        .mobile-only-actions { display: flex !important; }
       }
 
       @media (max-width: 900px) {

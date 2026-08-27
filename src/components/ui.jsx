@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ImageOff, MoreVertical } from "lucide-react";
 
 export function Card({ theme, children, style, ...rest }) {
@@ -138,22 +139,40 @@ export function SortHeader({ theme, label, field, sort, onSort, align }) {
 
 export function ActionsMenu({ theme, actions }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const openMenu = () => {
+    const rect = btnRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (!open) return;
-    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onDocClick = (e) => {
+      if (menuRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    const onDismiss = () => setOpen(false);
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    window.addEventListener("scroll", onDismiss, true);
+    window.addEventListener("resize", onDismiss);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("scroll", onDismiss, true);
+      window.removeEventListener("resize", onDismiss);
+    };
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpen((o) => !o)} style={iconBtn(theme)}>
+    <>
+      <button ref={btnRef} onClick={() => (open ? setOpen(false) : openMenu())} style={iconBtn(theme)}>
         <MoreVertical size={16} />
       </button>
-      {open && (
-        <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", minWidth: 170, zIndex: 45, overflow: "hidden" }}>
+      {open && pos && createPortal(
+        <div ref={menuRef} style={{ position: "fixed", top: pos.top, right: pos.right, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", minWidth: 170, zIndex: 1000, overflow: "hidden" }}>
           {actions.map((a, i) => {
             const Icon = a.icon;
             return (
@@ -167,9 +186,10 @@ export function ActionsMenu({ theme, actions }) {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
