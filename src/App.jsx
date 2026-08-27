@@ -230,7 +230,7 @@ export default function App() {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{profile.full_name}</div>
-            <div style={{ fontSize: 10.5, color: theme.textMuted }}>{niche?.name || "Sem nicho"}</div>
+            <div style={{ fontSize: 10.5, color: theme.textMuted }}>{isAdmin ? "Admin" : (niche?.name || "Sem nicho")}</div>
           </div>
           <button onClick={logout} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted, display: "flex", padding: 0 }} title="Sair">
             <LogOut size={15} />
