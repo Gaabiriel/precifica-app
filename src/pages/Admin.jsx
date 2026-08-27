@@ -1,8 +1,29 @@
 import React, { useEffect, useState } from "react";
 import { ShieldCheck, Plus, Pencil, Trash2 } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, Modal, ConfirmModal, ActionsMenu } from "../components/ui.jsx";
 import { generateNicheTheme, slugify } from "../theme";
 import { supabase } from "../supabaseClient";
+
+const STATUS_LABELS = {
+  trialing: "Em teste",
+  active: "Ativa",
+  past_due: "Pagamento atrasado",
+  canceled: "Cancelada",
+};
+const STATUS_TONES = {
+  trialing: (theme) => theme.textMuted,
+  active: (theme) => theme.good,
+  past_due: (theme) => theme.danger,
+  canceled: (theme) => theme.danger,
+};
+
+function Chip({ theme, tone, children }) {
+  return (
+    <span style={{ display: "inline-flex", fontSize: 11, fontWeight: 700, color: tone, background: `${tone}1A`, padding: "3px 9px", borderRadius: 20 }}>
+      {children}
+    </span>
+  );
+}
 
 export default function Admin({ theme }) {
   const [profiles, setProfiles] = useState([]);
@@ -12,6 +33,7 @@ export default function Admin({ theme }) {
   const [nicheModal, setNicheModal] = useState(null); // null | {} | niche
   const [nicheDeleteTarget, setNicheDeleteTarget] = useState(null);
   const [nicheError, setNicheError] = useState("");
+  const [userModal, setUserModal] = useState(null); // null | profile
 
   const load = async () => {
     setLoading(true);
@@ -63,33 +85,56 @@ export default function Admin({ theme }) {
         <div style={{ fontSize: 17, fontWeight: 800 }}>Administração</div>
       </div>
 
-      <Card theme={theme} style={{ overflow: "hidden", marginBottom: 24 }}>
+      <Card theme={theme} className="admin-users-table-view" style={{ overflow: "hidden", marginBottom: 24 }}>
         <div style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13, borderBottom: `1px solid ${theme.border}` }}>Usuários e assinaturas</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr", gap: 14, padding: "10px 16px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: theme.textMuted, background: theme.surfaceAlt, borderBottom: `1px solid ${theme.border}` }}>
-          <span>Usuário</span><span>Nicho</span><span>Plano</span><span>Status</span><span>Papel</span>
+        <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr 0.8fr 50px", gap: 14, padding: "10px 16px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: theme.textMuted, background: theme.surfaceAlt, borderBottom: `1px solid ${theme.border}` }}>
+          <span>Usuário</span><span>Nicho</span><span>Plano</span><span>Status</span><span>Papel</span><span></span>
         </div>
-        {profiles.map((p) => (
-          <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr", gap: 14, padding: "10px 16px", fontSize: 13, alignItems: "center", borderTop: `1px solid ${theme.border}` }}>
-            <div>
-              <div style={{ fontWeight: 600 }}>{p.full_name || "—"}</div>
-              <div style={{ fontSize: 11.5, color: theme.textMuted }}>{p.email}</div>
+        {profiles.map((p) => {
+          const nicheName = niches.find((n) => n.id === p.niche_id)?.name || "—";
+          const planName = plans.find((pl) => pl.id === p.plan_id)?.name || "—";
+          return (
+            <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr 0.8fr 50px", gap: 14, padding: "10px 16px", fontSize: 13, alignItems: "center", borderTop: `1px solid ${theme.border}` }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{p.full_name || "—"}</div>
+                <div style={{ fontSize: 11.5, color: theme.textMuted }}>{p.email}</div>
+              </div>
+              <span style={{ color: theme.textMuted }}>{nicheName}</span>
+              <span style={{ color: theme.textMuted }}>{planName}</span>
+              <Chip theme={theme} tone={STATUS_TONES[p.subscription_status]?.(theme) || theme.textMuted}>{STATUS_LABELS[p.subscription_status] || p.subscription_status}</Chip>
+              <Chip theme={theme} tone={p.role === "admin" ? theme.primary : theme.textMuted}>{p.role === "admin" ? "Admin" : "Usuário"}</Chip>
+              <ActionsMenu theme={theme} actions={[{ label: "Editar", icon: Pencil, onClick: () => setUserModal(p) }]} />
             </div>
-            <select style={{ ...inputStyle(theme), width: "auto", maxWidth: 200, fontSize: 12 }} value={p.niche_id || ""} onChange={(e) => updateProfile(p.id, { niche_id: e.target.value })}>
-              {niches.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
-            </select>
-            <select style={{ ...inputStyle(theme), width: "auto", maxWidth: 160, fontSize: 12 }} value={p.plan_id || ""} onChange={(e) => updateProfile(p.id, { plan_id: e.target.value })}>
-              {plans.map((pl) => <option key={pl.id} value={pl.id}>{pl.name}</option>)}
-            </select>
-            <select style={{ ...inputStyle(theme), width: "auto", maxWidth: 140, fontSize: 12 }} value={p.subscription_status} onChange={(e) => updateProfile(p.id, { subscription_status: e.target.value })}>
-              {["trialing", "active", "past_due", "canceled"].map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select style={{ ...inputStyle(theme), width: "auto", maxWidth: 120, fontSize: 12 }} value={p.role} onChange={(e) => updateProfile(p.id, { role: e.target.value })}>
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-            </select>
-          </div>
-        ))}
+          );
+        })}
       </Card>
+
+      <div className="admin-users-card-view" style={{ flexDirection: "column", gap: 10, marginBottom: 24 }}>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>Usuários e assinaturas</div>
+        {profiles.map((p) => {
+          const nicheName = niches.find((n) => n.id === p.niche_id)?.name || "—";
+          const planName = plans.find((pl) => pl.id === p.plan_id)?.name || "—";
+          return (
+            <Card key={p.id} theme={theme} style={{ padding: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.full_name || "—"}</div>
+                  <div style={{ fontSize: 11.5, color: theme.textMuted }}>{p.email}</div>
+                </div>
+                <ActionsMenu theme={theme} actions={[{ label: "Editar", icon: Pencil, onClick: () => setUserModal(p) }]} />
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+                <Chip theme={theme} tone={STATUS_TONES[p.subscription_status]?.(theme) || theme.textMuted}>{STATUS_LABELS[p.subscription_status] || p.subscription_status}</Chip>
+                <Chip theme={theme} tone={p.role === "admin" ? theme.primary : theme.textMuted}>{p.role === "admin" ? "Admin" : "Usuário"}</Chip>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 10, fontSize: 12.5 }}>
+                <div><span style={{ color: theme.textMuted }}>Nicho: </span>{nicheName}</div>
+                <div><span style={{ color: theme.textMuted }}>Plano: </span>{planName}</div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
 
       <Card theme={theme} style={{ overflow: "hidden", marginBottom: 24 }}>
         <div style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13, borderBottom: `1px solid ${theme.border}` }}>Planos disponíveis</div>
@@ -115,21 +160,34 @@ export default function Admin({ theme }) {
           <div style={{ padding: "10px 16px", fontSize: 12.5, color: theme.danger, borderBottom: `1px solid ${theme.border}` }}>{nicheError}</div>
         )}
         {niches.map((n) => (
-          <div key={n.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", fontSize: 13, borderTop: `1px solid ${theme.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div key={n.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 16px", fontSize: 13, borderTop: `1px solid ${theme.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               <span style={{ width: 22, height: 22, borderRadius: 6, background: n.theme?.primary || "#ccc", flexShrink: 0 }} />
-              <span style={{ fontWeight: 600 }}>{n.name}</span>
-              <span style={{ color: theme.textMuted, fontSize: 11.5 }}>{n.slug}</span>
+              <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.name}</span>
+              <span style={{ color: theme.textMuted, fontSize: 11.5, flexShrink: 0 }}>{n.slug}</span>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => { setNicheError(""); setNicheModal(n); }} style={iconBtn(theme)}><Pencil size={14} /></button>
-              <button onClick={() => { setNicheError(""); setNicheDeleteTarget(n); }} style={iconBtn(theme)}><Trash2 size={14} /></button>
-            </div>
+            <ActionsMenu
+              theme={theme}
+              actions={[
+                { label: "Editar", icon: Pencil, onClick: () => { setNicheError(""); setNicheModal(n); } },
+                { label: "Excluir", icon: Trash2, danger: true, onClick: () => { setNicheError(""); setNicheDeleteTarget(n); } },
+              ]}
+            />
           </div>
         ))}
         {niches.length === 0 && <div style={{ padding: 24, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>Nenhum nicho cadastrado ainda.</div>}
       </Card>
 
+      {userModal && (
+        <UserModal
+          theme={theme}
+          profile={userModal}
+          niches={niches}
+          plans={plans}
+          onClose={() => setUserModal(null)}
+          onSave={(patch) => { updateProfile(userModal.id, patch); setUserModal(null); }}
+        />
+      )}
       {nicheModal && (
         <NicheModal theme={theme} niche={nicheModal} error={nicheError} onClose={() => setNicheModal(null)} onSave={saveNiche} />
       )}
@@ -142,6 +200,46 @@ export default function Admin({ theme }) {
         />
       )}
     </div>
+  );
+}
+
+function UserModal({ theme, profile, niches, plans, onClose, onSave }) {
+  const [form, setForm] = useState({
+    niche_id: profile.niche_id || "",
+    plan_id: profile.plan_id || "",
+    subscription_status: profile.subscription_status,
+    role: profile.role,
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <Modal theme={theme} title={`Editar usuário — ${profile.full_name || profile.email}`} onClose={onClose} width={400}>
+      <Field label="Nicho">
+        <select style={inputStyle(theme)} value={form.niche_id} onChange={(e) => set("niche_id", e.target.value)}>
+          {niches.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Plano">
+        <select style={inputStyle(theme)} value={form.plan_id} onChange={(e) => set("plan_id", e.target.value)}>
+          {plans.map((pl) => <option key={pl.id} value={pl.id}>{pl.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Status da assinatura">
+        <select style={inputStyle(theme)} value={form.subscription_status} onChange={(e) => set("subscription_status", e.target.value)}>
+          {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </Field>
+      <Field label="Papel">
+        <select style={inputStyle(theme)} value={form.role} onChange={(e) => set("role", e.target.value)}>
+          <option value="user">Usuário</option>
+          <option value="admin">Admin</option>
+        </select>
+      </Field>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+        <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button theme={theme} onClick={() => onSave(form)}>Salvar</Button>
+      </div>
+    </Modal>
   );
 }
 
