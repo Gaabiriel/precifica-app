@@ -4,18 +4,19 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader, Spinner } from "../components/ui.jsx";
 import { brl } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { fetchMaterials, saveMaterial, deleteMaterial } from "../data.js";
+import { fetchMaterials, fetchCategories, saveMaterial, deleteMaterial } from "../data.js";
 
 const PAGE_SIZE = 10;
 const MAX_IMAGES = 5;
 
 export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
   const [materials, setMaterials] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const loadedOnce = useRef(false);
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [onlyLowStock, setOnlyLowStock] = useState(false);
   const [sort, setSort] = useState({ field: "name", dir: "asc" });
   const [page, setPage] = useState(1);
@@ -27,13 +28,16 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
 
   const reload = useCallback(async () => {
     if (loadedOnce.current) setRefreshing(true);
-    const mats = await fetchMaterials();
+    const [mats, cats] = await Promise.all([fetchMaterials(), fetchCategories()]);
     setMaterials(mats);
+    setCategories(cats);
     loadedOnce.current = true;
     setLoading(false);
     setRefreshing(false);
   }, []);
   useEffect(() => { reload(); }, [reload]);
+
+  const categoryMap = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c.name])), [categories]);
 
   const handleSave = async (m) => {
     const { error } = await saveMaterial(ownerId, m);
@@ -53,25 +57,23 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
     reload();
   };
 
-  const categories = useMemo(
-    () => Array.from(new Set(materials.map((m) => m.category).filter(Boolean))).sort(),
-    [materials]
-  );
-
   const filtered = useMemo(() => {
     let list = materials.filter((m) => m.name.toLowerCase().includes(q.toLowerCase()));
-    if (category) list = list.filter((m) => m.category === category);
+    if (categoryFilter) list = list.filter((m) => m.category_id === categoryFilter);
     if (onlyLowStock) list = list.filter((m) => Number(m.stock) <= Number(m.min_stock));
     const dir = sort.dir === "asc" ? 1 : -1;
     list = [...list].sort((a, b) => {
+      if (sort.field === "category") {
+        return (categoryMap[a.category_id] || "").localeCompare(categoryMap[b.category_id] || "") * dir;
+      }
       const va = a[sort.field], vb = b[sort.field];
       if (typeof va === "string") return va.localeCompare(vb) * dir;
       return ((va || 0) - (vb || 0)) * dir;
     });
     return list;
-  }, [materials, q, category, onlyLowStock, sort]);
+  }, [materials, q, categoryFilter, onlyLowStock, sort, categoryMap]);
 
-  useEffect(() => { setPage(1); }, [q, category, onlyLowStock, sort]);
+  useEffect(() => { setPage(1); }, [q, categoryFilter, onlyLowStock, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -86,9 +88,9 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: 1 }}>
           <input placeholder="Buscar material…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 220 }} />
-          <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 190 }}>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 190 }}>
             <option value="">Todas as categorias</option>
-            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: theme.textMuted, cursor: "pointer" }}>
             <input type="checkbox" checked={onlyLowStock} onChange={(e) => setOnlyLowStock(e.target.checked)} />
@@ -119,7 +121,7 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
                 <MaterialThumb theme={theme} url={m.image_urls?.[0]} size={30} />
                 <span style={{ fontWeight: 600 }}>{m.name}</span>
               </span>
-              <span style={{ color: theme.textMuted }}>{m.category || "—"}</span>
+              <span style={{ color: theme.textMuted }}>{categoryMap[m.category_id] || "—"}</span>
               <span>{brl(m.price)} / {m.unit}</span>
               <span style={{ color: low ? theme.danger : theme.text, fontWeight: low ? 700 : 400 }}>{m.stock} {m.unit}</span>
               <span style={{ display: "flex", gap: 6 }}>
@@ -143,7 +145,7 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
                   <MaterialThumb theme={theme} url={m.image_urls?.[0]} size={40} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
-                    <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>{m.category || "Sem categoria"}</div>
+                    <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>{categoryMap[m.category_id] || "Sem categoria"}</div>
                   </div>
                 </div>
                 <ActionsMenu
@@ -171,7 +173,7 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
 
       <Pagination theme={theme} page={currentPage} totalPages={totalPages} onChange={setPage} />
 
-      {modal && <MaterialModal theme={theme} material={modal} onClose={() => setModal(null)} onSave={handleSave} />}
+      {modal && <MaterialModal theme={theme} material={modal} categories={categories} onClose={() => setModal(null)} onSave={handleSave} />}
       {historyOf && <PriceHistoryModal theme={theme} material={historyOf} onClose={() => setHistoryOf(null)} />}
       {deleteTarget && (
         <ConfirmModal
@@ -204,10 +206,10 @@ function MaterialThumb({ theme, url, size = 32 }) {
   );
 }
 
-function MaterialModal({ theme, material, onClose, onSave }) {
+function MaterialModal({ theme, material, categories, onClose, onSave }) {
   const [form, setForm] = useState({
-    name: "", category: "", unit: "un", price: 0, stock: 0, min_stock: 0,
-    waste_percent: 0, supplier: "", image_urls: [], reference_measure: "",
+    name: "", category_id: "", unit: "un", price: 0, stock: 0, min_stock: 0,
+    waste_percent: 0, supplier: "", image_urls: [], reference_measure: "", technical_description: "",
     ...material,
   });
   const [uploading, setUploading] = useState(false);
@@ -238,8 +240,11 @@ function MaterialModal({ theme, material, onClose, onSave }) {
       <Field label="Nome do material">
         <input style={inputStyle(theme)} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Ex: Corvin Dune, Chocolate Belga…" />
       </Field>
-      <Field label="Categoria">
-        <input style={inputStyle(theme)} value={form.category} onChange={(e) => set("category", e.target.value)} />
+      <Field label="Categoria" hint={categories.length === 0 ? "Cadastre categorias em Configurações" : undefined}>
+        <select style={inputStyle(theme)} value={form.category_id || ""} onChange={(e) => set("category_id", e.target.value || null)}>
+          <option value="">Sem categoria</option>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
       </Field>
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 5, opacity: 0.75 }}>
@@ -288,6 +293,9 @@ function MaterialModal({ theme, material, onClose, onSave }) {
         </div>
       </div>
       <Field label="Fornecedor (opcional)"><input style={inputStyle(theme)} value={form.supplier || ""} onChange={(e) => set("supplier", e.target.value)} /></Field>
+      <Field label="Descrição técnica (opcional)" hint="Composição, cuidados, especificações…">
+        <textarea rows={3} style={{ ...inputStyle(theme), resize: "vertical", fontFamily: "inherit" }} value={form.technical_description || ""} onChange={(e) => set("technical_description", e.target.value)} />
+      </Field>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button theme={theme} onClick={() => form.name.trim() && onSave(form)}>Salvar</Button>

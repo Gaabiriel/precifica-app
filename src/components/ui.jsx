@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ImageOff, MoreVertical } from "lucide-react";
+import { brl } from "../pricing.js";
 
 export function Spinner({ theme, size = 15, style }) {
   return (
@@ -209,6 +210,37 @@ export function ConfirmModal({ theme, title = "Confirmar exclusão", message, co
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <Button theme={theme} variant="ghost" onClick={onCancel}>Cancelar</Button>
         <Button theme={theme} onClick={onConfirm} style={{ background: theme.danger }}>{confirmLabel}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+export function MaterialDetailModal({ theme, material, onClose }) {
+  const low = Number(material.stock) <= Number(material.min_stock);
+  return (
+    <Modal theme={theme} title={material.name} onClose={onClose} width={420}>
+      {material.image_urls?.[0] ? (
+        <img src={material.image_urls[0]} alt="" style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 8, marginBottom: 14 }} />
+      ) : (
+        <div style={{ height: 160, borderRadius: 8, background: theme.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+          <ImageOff size={26} color={theme.textMuted} />
+        </div>
+      )}
+      <Row theme={theme} label="Categoria" value={material.category || "—"} />
+      <Row theme={theme} label="Preço" value={`${brl(material.price)} / ${material.unit}`} />
+      <Row theme={theme} label="Estoque" value={`${material.stock} ${material.unit}`} tone={low ? theme.danger : undefined} />
+      <Row theme={theme} label="Estoque mínimo" value={`${material.min_stock} ${material.unit}`} />
+      <Row theme={theme} label="% de perda" value={`${material.waste_percent || 0}%`} />
+      {material.reference_measure && <Row theme={theme} label="Medida de referência" value={material.reference_measure} />}
+      {material.supplier && <Row theme={theme} label="Fornecedor" value={material.supplier} />}
+      {material.technical_description && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${theme.border}` }}>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.6, marginBottom: 6 }}>Descrição técnica</div>
+          <div style={{ fontSize: 13, color: theme.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{material.technical_description}</div>
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+        <Button theme={theme} variant="ghost" onClick={onClose}>Fechar</Button>
       </div>
     </Modal>
   );

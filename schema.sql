@@ -58,17 +58,32 @@ create table public.settings (
   card_fee_percent numeric not null default 4.99,
   default_margin_percent numeric not null default 100,
   round_to_90 boolean not null default true,
+  initial_investment numeric not null default 0,  -- equipamentos, softwares, estoque inicial etc.; usado no acompanhamento de retorno em Relatórios
   updated_at timestamptz not null default now()
 );
 
 -- ----------------------------------------------------------------------------
 -- 5. MATERIAIS (estoque)
 -- ----------------------------------------------------------------------------
+
+-- categorias de material — por nicho (não por usuário): todo mundo que usa o
+-- mesmo tipo de negócio compartilha a mesma lista de categorias (crud em
+-- Configurações). Diferente de materiais/settings, que são por usuário.
+create table public.categories (
+  id uuid primary key default gen_random_uuid(),
+  niche_id uuid not null references public.niches(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now(),
+  unique (niche_id, name)
+);
+create index categories_niche_idx on public.categories(niche_id);
+
 create table public.materials (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
   name text not null,
-  category text,
+  category text,                     -- legado; ver category_id abaixo
+  category_id uuid references public.categories(id) on delete set null,
   unit text not null default 'un',   -- m, cm, m2, cm2, kg, g, l, ml, un
   price numeric not null default 0,  -- preço por unidade de medida
   stock numeric not null default 0,
@@ -78,6 +93,7 @@ create table public.materials (
   image_url text,                    -- legado; ver image_urls abaixo
   image_urls text[] not null default '{}'::text[],  -- até 5 fotos (Supabase Storage)
   reference_measure text,            -- texto livre vindo da planilha original
+  technical_description text,        -- ficha técnica: composição, cuidados, especificações etc.
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -229,6 +245,7 @@ alter table public.niches enable row level security;
 alter table public.subscription_plans enable row level security;
 alter table public.profiles enable row level security;
 alter table public.settings enable row level security;
+alter table public.categories enable row level security;
 alter table public.materials enable row level security;
 alter table public.material_price_history enable row level security;
 alter table public.products enable row level security;
@@ -257,6 +274,10 @@ create policy "settings_owner" on public.settings for all
   with check (owner_id = auth.uid());
 
 -- materials
+create policy "categories_same_niche" on public.categories for all
+  using (niche_id = (select p.niche_id from public.profiles p where p.id = auth.uid()))
+  with check (niche_id = (select p.niche_id from public.profiles p where p.id = auth.uid()));
+
 create policy "materials_owner" on public.materials for all
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());

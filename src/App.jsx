@@ -183,6 +183,7 @@ export default function App() {
             <SettingsPage
               theme={theme}
               ownerId={ownerId}
+              nicheId={nicheId}
               showToast={showToast}
               logoUrl={profile.logo_url}
               onLogoChange={(url) => setProfile((p) => ({ ...p, logo_url: url }))}

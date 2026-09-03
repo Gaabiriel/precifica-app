@@ -45,26 +45,53 @@ function hslToHex(h, s, l) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
 }
 
-/** Gera a paleta completa de um nicho a partir de uma única cor principal. */
-export function generateNicheTheme(primaryHex) {
-  const primaryHsl = hexToHsl(primaryHex);
-  const h = primaryHsl.h;
-  const primaryS = Math.min(primaryHsl.s, 55);
-  const primaryL = Math.min(Math.max(primaryHsl.l, 28), 42);
+/**
+ * Gera a paleta completa de um nicho a partir de uma cor principal (e,
+ * opcionalmente, uma segunda cor de destaque com um matiz diferente — pra
+ * temas "duotone" tipo rosa + azul — e um modo escuro).
+ */
+export function generateNicheTheme(primaryHex, opts = {}) {
+  const dark = !!opts.dark;
+  const accentHex = opts.accentHex || primaryHex;
 
-  return {
-    bg: hslToHex(h, 16, 96.5),
-    surface: "#FFFFFF",
-    surfaceAlt: hslToHex(h, 22, 90.5),
-    border: hslToHex(h, 24, 85),
-    primary: hslToHex(h, primaryS, primaryL),
-    primarySoft: hslToHex(h, 38, 88),
-    accent: hslToHex(h, Math.min(primaryS + 12, 60), Math.min(primaryL + 10, 55)),
-    text: hslToHex(h, 16, 16),
-    textMuted: hslToHex(h, 12, 47),
-    danger: hslToHex(6, 45, 50),
-    good: hslToHex(120, 22, 40),
-  };
+  const primaryHsl = hexToHsl(primaryHex);
+  const accentHsl = hexToHsl(accentHex);
+  const h = primaryHsl.h;
+  const ah = accentHsl.h;
+  const primaryS = Math.min(primaryHsl.s, 55);
+  const accentS = Math.min(accentHsl.s, 55);
+
+  const palette = dark
+    ? {
+        bg: hslToHex(h, 26, 10),
+        surface: hslToHex(h, 22, 14),
+        surfaceAlt: hslToHex(h, 20, 19),
+        border: hslToHex(h, 16, 27),
+        primary: hslToHex(h, Math.min(primaryS + 10, 62), Math.min(Math.max(primaryHsl.l, 55), 68)),
+        primarySoft: hslToHex(h, 28, 22),
+        accent: hslToHex(ah, Math.min(accentS + 15, 65), Math.min(Math.max(accentHsl.l, 55), 70)),
+        text: hslToHex(h, 10, 95),
+        textMuted: hslToHex(h, 8, 68),
+        danger: hslToHex(6, 65, 62),
+        good: hslToHex(140, 40, 56),
+      }
+    : {
+        bg: hslToHex(h, 16, 96.5),
+        surface: "#FFFFFF",
+        surfaceAlt: hslToHex(h, 22, 90.5),
+        border: hslToHex(h, 24, 85),
+        primary: hslToHex(h, primaryS, Math.min(Math.max(primaryHsl.l, 28), 42)),
+        primarySoft: hslToHex(h, 38, 88),
+        accent: hslToHex(ah, Math.min(accentS + 12, 60), Math.min(Math.max(accentHsl.l, 28), 42) + 10),
+        text: hslToHex(h, 16, 16),
+        textMuted: hslToHex(h, 12, 47),
+        danger: hslToHex(6, 45, 50),
+        good: hslToHex(120, 22, 40),
+      };
+
+  // guarda as cores de entrada no próprio objeto pra reabrir o editor depois
+  // sem perder o que a pessoa escolheu (os campos acima são o que a UI usa).
+  return { ...palette, dark, primaryHex, accentHex };
 }
 
 export function slugify(name) {

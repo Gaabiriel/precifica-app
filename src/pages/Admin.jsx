@@ -52,9 +52,9 @@ export default function Admin({ theme }) {
     await supabase.from("profiles").update(patch).eq("id", id);
   };
 
-  const saveNiche = async ({ id, name, primaryColor }) => {
+  const saveNiche = async ({ id, name, primaryColor, accentColor, dark }) => {
     setNicheError("");
-    const theme_ = generateNicheTheme(primaryColor);
+    const theme_ = generateNicheTheme(primaryColor, { accentHex: accentColor, dark });
     if (id) {
       const { error } = await supabase.from("niches").update({ name, theme: theme_ }).eq("id", id);
       if (error) { setNicheError("Não foi possível salvar. Tente outro nome."); return; }
@@ -251,23 +251,35 @@ function UserModal({ theme, profile, niches, plans, onClose, onSave }) {
 
 function NicheModal({ theme, niche, error, onClose, onSave }) {
   const [name, setName] = useState(niche.name || "");
-  const [primaryColor, setPrimaryColor] = useState(niche.theme?.primary || "#7A5C42");
+  const [primaryColor, setPrimaryColor] = useState(niche.theme?.primaryHex || niche.theme?.primary || "#7A5C42");
+  const [accentColor, setAccentColor] = useState(niche.theme?.accentHex || niche.theme?.primaryHex || niche.theme?.primary || "#7A5C42");
+  const [dark, setDark] = useState(!!niche.theme?.dark);
 
   return (
     <Modal theme={theme} title={niche.id ? "Editar nicho" : "Novo nicho"} onClose={onClose} width={380}>
       <Field label="Nome do nicho">
         <input style={inputStyle(theme)} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Sapataria & Calçados" />
       </Field>
-      <Field label="Cor principal" hint="O resto da paleta (fundo, textos, bordas etc.) é gerado automaticamente a partir dessa cor.">
+      <Field label="Cor principal" hint="Usada nos botões, cabeçalhos e no fundo (nichos claros) — o resto da paleta é derivado dela.">
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} style={{ width: 44, height: 36, padding: 0, border: `1px solid ${theme.border}`, borderRadius: 8, cursor: "pointer" }} />
           <input style={{ ...inputStyle(theme), flex: 1 }} value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
         </div>
       </Field>
+      <Field label="Cor de destaque (opcional)" hint="Um segundo tom, usado nos gráficos e detalhes — pra temas de duas cores (ex: rosa + azul).">
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} style={{ width: 44, height: 36, padding: 0, border: `1px solid ${theme.border}`, borderRadius: 8, cursor: "pointer" }} />
+          <input style={{ ...inputStyle(theme), flex: 1 }} value={accentColor} onChange={(e) => setAccentColor(e.target.value)} />
+        </div>
+      </Field>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, margin: "4px 0 14px", cursor: "pointer" }}>
+        <input type="checkbox" checked={dark} onChange={(e) => setDark(e.target.checked)} />
+        Modo escuro (fundo escuro, texto claro)
+      </label>
       {error && <div style={{ color: theme.danger, fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button theme={theme} onClick={() => name.trim() && onSave({ id: niche.id, name, primaryColor })}>Salvar</Button>
+        <Button theme={theme} onClick={() => name.trim() && onSave({ id: niche.id, name, primaryColor, accentColor, dark })}>Salvar</Button>
       </div>
     </Modal>
   );

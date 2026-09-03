@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner } from "../components/ui.jsx";
+import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler } from "lucide-react";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
 import { useCatalogData, saveProduct, deleteProduct } from "../data.js";
@@ -134,6 +134,11 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
               <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
                 {(product.kitItems || []).length} {(product.kitItems || []).length === 1 ? "produto" : "produtos"} no kit
               </div>
+              {product.dimensions && (
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: theme.textMuted, marginBottom: 10, marginTop: -6 }}>
+                  <Ruler size={12} /> {product.dimensions}
+                </div>
+              )}
               <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} />
               <Row theme={theme} label="Preço de venda" value={brl(calc.finalPrice)} bold />
               <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={theme.good} />
@@ -189,12 +194,13 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
 
 function KitModal({ theme, kit, materials, products, settings, onClose, onSave }) {
   const [form, setForm] = useState({
-    name: "", image_urls: [], labor_minutes: 0, is_kit: true,
+    name: "", image_urls: [], labor_minutes: 0, dimensions: "", is_kit: true,
     bom: [], kitItems: [], margin_percent: settings.default_margin_percent, sale_price_override: null,
     ...kit,
     is_kit: true,
   });
   const [uploading, setUploading] = useState(false);
+  const [detailMaterial, setDetailMaterial] = useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const calc = useMemo(() => computeProductCost(form, materials, products, settings), [form, materials, products, settings]);
 
@@ -229,9 +235,18 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
 
   return (
     <Modal theme={theme} title={kit.id ? "Editar kit" : "Novo kit"} onClose={onClose} width={640}>
-      <Field label="Nome do kit">
-        <input style={inputStyle(theme)} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Ex: Kit Viagem" />
-      </Field>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: "2 1 200px" }}>
+          <Field label="Nome do kit">
+            <input style={inputStyle(theme)} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Ex: Kit Viagem" />
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label="Dimensões (opcional)" hint="Ex: 30x20x10 cm">
+            <input style={inputStyle(theme)} value={form.dimensions || ""} onChange={(e) => set("dimensions", e.target.value)} />
+          </Field>
+        </div>
+      </div>
 
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 5, opacity: 0.75 }}>
@@ -284,6 +299,7 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
             <input type="number" step="0.01" style={{ ...inputStyle(theme), flex: 1 }} value={line.qty} onChange={(e) => updateBomLine(idx, { qty: parseFloat(e.target.value) || 0 })} />
             <span style={{ fontSize: 12, color: theme.textMuted, width: 30 }}>{mat?.unit}</span>
             <span style={{ fontSize: 12.5, width: 66, textAlign: "right" }}>{brl((mat?.price || 0) * line.qty * (1 + (mat?.waste_percent || 0) / 100))}</span>
+            <button onClick={() => mat && setDetailMaterial(mat)} disabled={!mat} style={iconBtn(theme)} title="Ver detalhes do material"><Eye size={13} /></button>
             <button onClick={() => removeBomLine(idx)} style={iconBtn(theme)}><Trash2 size={13} /></button>
           </div>
         );
@@ -316,6 +332,8 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button theme={theme} onClick={() => form.name.trim() && onSave(form)}>Salvar kit</Button>
       </div>
+
+      {detailMaterial && <MaterialDetailModal theme={theme} material={detailMaterial} onClose={() => setDetailMaterial(null)} />}
     </Modal>
   );
 }

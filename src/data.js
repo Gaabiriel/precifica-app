@@ -30,9 +30,23 @@ export async function fetchSettings() {
   return data || null;
 }
 
+export async function fetchCategories() {
+  const { data } = await supabase.from("categories").select("*").order("name");
+  return data || [];
+}
+
 export async function fetchQuotes(limit = 10) {
   const { data } = await supabase.from("quotes").select("*").order("created_at", { ascending: false }).limit(limit);
   return data || [];
+}
+
+/** Soma o lucro de toda a produção já registrada (sem filtro de data) — usado pra acompanhar quanto do investimento inicial já voltou em vendas. */
+export async function fetchAllTimeProfit() {
+  const { data } = await supabase.from("production_log").select("qty, cost_snapshot");
+  return (data || []).reduce((sum, log) => {
+    const profit = log.cost_snapshot?.profit;
+    return sum + (typeof profit === "number" ? profit * log.qty : 0);
+  }, 0);
 }
 
 export async function fetchProductionLogSince(sinceDate) {
@@ -87,6 +101,16 @@ export async function saveMaterial(ownerId, m) {
 
 export async function deleteMaterial(id) {
   return supabase.from("materials").delete().eq("id", id);
+}
+
+export async function saveCategory(nicheId, c) {
+  const payload = { name: c.name, niche_id: nicheId };
+  if (c.id) return supabase.from("categories").update(payload).eq("id", c.id);
+  return supabase.from("categories").insert(payload);
+}
+
+export async function deleteCategory(id) {
+  return supabase.from("categories").delete().eq("id", id);
 }
 
 export async function saveProduct(ownerId, nicheId, p) {

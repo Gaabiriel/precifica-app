@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Package, Wallet, Receipt, TrendingUp } from "lucide-react";
+import { Package, Wallet, Receipt, TrendingUp, PiggyBank } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Card, StatCard } from "../components/ui.jsx";
+import { Card, StatCard, Row } from "../components/ui.jsx";
 import { brl, monthKey, productionLogValue } from "../pricing.js";
-import { useCatalogData, fetchProductionLogSince } from "../data.js";
+import { useCatalogData, fetchProductionLogSince, fetchAllTimeProfit } from "../data.js";
 
 const MONTHS_WINDOW = 6;
 
@@ -16,6 +16,8 @@ export default function Reports({ theme }) {
   const { materials, products, settings, loading: loadingCatalog } = useCatalogData();
   const [productionLog, setProductionLog] = useState([]);
   const [loadingLog, setLoadingLog] = useState(true);
+  const [allTimeProfit, setAllTimeProfit] = useState(0);
+  const [loadingAllTime, setLoadingAllTime] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
 
   useEffect(() => {
@@ -24,6 +26,13 @@ export default function Reports({ theme }) {
     fetchProductionLogSince(since).then((rows) => {
       setProductionLog(rows);
       setLoadingLog(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    fetchAllTimeProfit().then((total) => {
+      setAllTimeProfit(total);
+      setLoadingAllTime(false);
     });
   }, []);
 
@@ -88,21 +97,28 @@ export default function Reports({ theme }) {
     return Array.from(map.values()).sort((a, b) => b.profit - a.profit).slice(0, 8);
   }, [monthRows]);
 
-  if (loadingCatalog || loadingLog) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando relatórios…</div>;
+  if (loadingCatalog || loadingLog || loadingAllTime) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando relatórios…</div>;
+
+  const investment = settings?.initial_investment || 0;
 
   if (productionLog.length === 0) {
     return (
-      <Card theme={theme} style={{ padding: 40, textAlign: "center" }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Nenhuma produção registrada ainda</div>
-        <div style={{ fontSize: 13, color: theme.textMuted }}>
-          Assim que você registrar produção na aba Produtos, os relatórios de lucro e produtos mais vendidos aparecem aqui.
-        </div>
-      </Card>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        {investment > 0 && <InvestmentCard theme={theme} investment={investment} recovered={allTimeProfit} />}
+        <Card theme={theme} style={{ padding: 40, textAlign: "center" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Nenhuma produção registrada ainda</div>
+          <div style={{ fontSize: 13, color: theme.textMuted }}>
+            Assim que você registrar produção na aba Produtos, os relatórios de lucro e produtos mais vendidos aparecem aqui.
+          </div>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {investment > 0 && <InvestmentCard theme={theme} investment={investment} recovered={allTimeProfit} />}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div style={{ fontSize: 12.5, color: theme.textMuted }}>Mostrando dados de</div>
         <select
@@ -158,5 +174,26 @@ export default function Reports({ theme }) {
         )}
       </Card>
     </div>
+  );
+}
+
+function InvestmentCard({ theme, investment, recovered }) {
+  const pct = investment > 0 ? Math.min((recovered / investment) * 100, 100) : 0;
+  const remaining = Math.max(investment - recovered, 0);
+  return (
+    <Card theme={theme} style={{ padding: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <PiggyBank size={16} color={theme.primary} />
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Recuperação do investimento inicial</div>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: theme.surfaceAlt, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: theme.good, transition: "width .3s ease" }} />
+      </div>
+      <div style={{ maxWidth: 360 }}>
+        <Row theme={theme} label="Investido" value={brl(investment)} />
+        <Row theme={theme} label="Recuperado até agora" value={`${brl(recovered)} (${pct.toFixed(0)}%)`} tone={theme.good} />
+        <Row theme={theme} label="Ainda falta recuperar" value={brl(remaining)} />
+      </div>
+    </Card>
   );
 }
