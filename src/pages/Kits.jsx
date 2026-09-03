@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
+import { useCatalogData, saveProduct, deleteProduct } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -15,7 +16,8 @@ const SORT_OPTIONS = [
   { value: "realMarginPercent", label: "Margem real" },
 ];
 
-export default function Kits({ theme, products, materials, settings, onSave, onDelete, maxProducts }) {
+export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }) {
+  const { materials, products, settings, loading, refreshing, reload } = useCatalogData();
   const kits = useMemo(() => products.filter((p) => p.is_kit), [products]);
 
   const [modal, setModal] = useState(null);
@@ -45,8 +47,26 @@ export default function Kits({ theme, products, materials, settings, onSave, onD
 
   const PAGE_SIZE = columns * ROWS_PER_PAGE;
 
+  const handleSave = async (k) => {
+    const { error } = await saveProduct(ownerId, nicheId, k);
+    if (error) { showToast("Erro ao salvar kit.", "err"); return; }
+    showToast("Kit salvo.");
+    setModal(null);
+    reload();
+  };
+  const handleDelete = async (id) => {
+    const { error } = await deleteProduct(id);
+    setDeleteTarget(null);
+    if (error) {
+      showToast(error.code === "23503" ? "Este kit é usado em outro kit. Remova-o antes." : "Erro ao excluir.", "err");
+      return;
+    }
+    showToast("Kit removido.");
+    reload();
+  };
+
   const kitCosts = useMemo(
-    () => kits.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })),
+    () => (settings ? kits.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
     [kits, materials, products, settings]
   );
 
@@ -68,6 +88,8 @@ export default function Kits({ theme, products, materials, settings, onSave, onD
   const currentPage = Math.min(page, totalPages);
   const paged = filteredSorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
+  if (loading) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando kits…</div>;
+
   return (
     <div>
       <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 16, lineHeight: 1.5, maxWidth: 640 }}>
@@ -87,9 +109,12 @@ export default function Kits({ theme, products, materials, settings, onSave, onD
             </button>
           </div>
         </div>
-        <Button className="products-new-btn" theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
-          {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo kit
-        </Button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {refreshing && <Spinner theme={theme} />}
+          <Button className="products-new-btn" theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
+            {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo kit
+          </Button>
+        </div>
       </div>
 
       {filteredSorted.length > 0 && (
@@ -137,14 +162,14 @@ export default function Kits({ theme, products, materials, settings, onSave, onD
 
       {modal && (
         <KitModal theme={theme} kit={modal} materials={materials} products={products} settings={settings}
-          onClose={() => setModal(null)} onSave={(k) => { onSave(k); setModal(null); }} />
+          onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {deleteTarget && (
         <ConfirmModal
           theme={theme}
           message={`Tem certeza que quer excluir o kit "${deleteTarget.name}"? Essa ação não pode ser desfeita.`}
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => { onDelete(deleteTarget.id); setDeleteTarget(null); }}
+          onConfirm={() => handleDelete(deleteTarget.id)}
         />
       )}
       {showLimitInfo && (

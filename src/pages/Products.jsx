@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Factory, ArrowUpDown, Upload, X, Lock } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
+import { useCatalogData, saveProduct, deleteProduct, produceProduct } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -16,7 +17,8 @@ const SORT_OPTIONS = [
   { value: "produced_count", label: "Produzidos" },
 ];
 
-export default function Products({ theme, products, materials, settings, onSave, onDelete, onProduce, maxProducts }) {
+export default function Products({ theme, ownerId, nicheId, showToast, maxProducts }) {
+  const { materials, products, settings, loading, refreshing, reload } = useCatalogData();
   const [modal, setModal] = useState(null);
   const [produceModal, setProduceModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -46,8 +48,33 @@ export default function Products({ theme, products, materials, settings, onSave,
 
   const PAGE_SIZE = columns * ROWS_PER_PAGE;
 
+  const handleSave = async (p) => {
+    const { error } = await saveProduct(ownerId, nicheId, p);
+    if (error) { showToast("Erro ao salvar produto.", "err"); return; }
+    showToast("Produto salvo.");
+    setModal(null);
+    reload();
+  };
+  const handleDelete = async (id) => {
+    const { error } = await deleteProduct(id);
+    setDeleteTarget(null);
+    if (error) {
+      showToast(error.code === "23503" ? "Este produto é usado em um kit. Remova-o do kit antes." : "Erro ao excluir.", "err");
+      return;
+    }
+    showToast("Produto removido.");
+    reload();
+  };
+  const handleProduce = async (product, qty) => {
+    const { error } = await produceProduct({ ownerId, product, qty, materials, products, settings });
+    setProduceModal(null);
+    if (error) { showToast(error.message, "err"); return; }
+    showToast(`Produção registrada: ${qty}x ${product.name}.`);
+    reload();
+  };
+
   const productCosts = useMemo(
-    () => simpleProducts.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })),
+    () => (settings ? simpleProducts.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
     [simpleProducts, materials, products, settings]
   );
 
@@ -69,6 +96,8 @@ export default function Products({ theme, products, materials, settings, onSave,
   const currentPage = Math.min(page, totalPages);
   const paged = filteredSorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
+  if (loading) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando produtos…</div>;
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
@@ -83,9 +112,12 @@ export default function Products({ theme, products, materials, settings, onSave,
             </button>
           </div>
         </div>
-        <Button className="products-new-btn" theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
-          {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo produto
-        </Button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {refreshing && <Spinner theme={theme} />}
+          <Button className="products-new-btn" theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
+            {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo produto
+          </Button>
+        </div>
       </div>
 
       {filteredSorted.length > 0 && (
@@ -132,18 +164,18 @@ export default function Products({ theme, products, materials, settings, onSave,
 
       {modal && (
         <ProductModal theme={theme} product={modal} materials={materials} products={products} settings={settings}
-          onClose={() => setModal(null)} onSave={(p) => { onSave(p); setModal(null); }} />
+          onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {produceModal && (
         <ProduceModal theme={theme} product={produceModal} onClose={() => setProduceModal(null)}
-          onConfirm={(p, qty) => { onProduce(p, qty); setProduceModal(null); }} />
+          onConfirm={handleProduce} />
       )}
       {deleteTarget && (
         <ConfirmModal
           theme={theme}
           message={`Tem certeza que quer excluir "${deleteTarget.name}"? Essa ação não pode ser desfeita.`}
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => { onDelete(deleteTarget.id); setDeleteTarget(null); }}
+          onConfirm={() => handleDelete(deleteTarget.id)}
         />
       )}
       {showLimitInfo && (

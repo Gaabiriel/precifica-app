@@ -12,6 +12,9 @@
       html, body, #root { height: 100%; margin: 0; }
       body { font-family: 'Manrope', system-ui, sans-serif; }
 
+      @keyframes app-spin { to { transform: rotate(360deg); } }
+      .app-spinner { display: inline-block; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; opacity: 0.6; animation: app-spin .6s linear infinite; flex-shrink: 0; }
+
       .app-menu-btn { display: none; }
       .app-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,15,20,.42); z-index: 65; }
       .materials-card-view { display: none; }

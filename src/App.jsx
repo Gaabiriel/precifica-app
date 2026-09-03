@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   LayoutDashboard, Boxes, ShoppingBag, Settings2, Tag,
   ShieldCheck, FileText, LogOut, CheckCircle2, AlertTriangle, Menu, TrendingUp, Layers,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { FALLBACK_THEME } from "./theme";
-import { computeProductCost } from "./pricing.js";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Materials from "./pages/Materials.jsx";
@@ -30,14 +29,10 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [niche, setNiche] = useState(null);
   const [tab, setTab] = useState("dashboard");
-  const [materials, setMaterials] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [settings, setSettings] = useState(null);
-  const [quotes, setQuotes] = useState([]);
-  const [productionLog, setProductionLog] = useState([]);
   const [toast, setToast] = useState(null);
-  const [loadingData, setLoadingData] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const loadedForUserId = useRef(null);
 
   const showToast = (msg, kind = "ok") => { setToast({ msg, kind }); setTimeout(() => setToast(null), 2600); };
 
@@ -48,134 +43,39 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // ---- carregar perfil + dados do usuário ----
-  const loadAll = useCallback(async () => {
-    if (!session) return;
-    setLoadingData(true);
+  // ---- carregar só o perfil (dados de cada página são buscados por ela mesma) ----
+  // O cliente do Supabase revalida a sessão (e re-emite onAuthStateChange) toda
+  // vez que a aba volta a ficar em foco — isso NÃO deve recarregar o perfil nem
+  // resetar a tela; só quando o usuário logado realmente muda (login/logout).
+  const loadProfile = useCallback(async (userId) => {
+    setLoadingProfile(true);
     const { data: prof } = await supabase
-      .from("profiles").select("*, niches(*), subscription_plans(*)").eq("id", session.user.id).single();
+      .from("profiles").select("*, niches(*), subscription_plans(*)").eq("id", userId).single();
     setProfile(prof);
     setNiche(prof?.niches || null);
+    setLoadingProfile(false);
+  }, []);
 
-    const [{ data: mats }, { data: prods }, { data: pMats }, { data: kitItems }, { data: st }, { data: qs }, { data: plog }] = await Promise.all([
-      supabase.from("materials").select("*").order("name"),
-      supabase.from("products").select("*").order("name"),
-      supabase.from("product_materials").select("*"),
-      supabase.from("product_kit_items").select("*"),
-      supabase.from("settings").select("*").eq("owner_id", session.user.id).single(),
-      supabase.from("quotes").select("*").order("created_at", { ascending: false }).limit(10),
-      supabase.from("production_log").select("*").order("produced_at", { ascending: false }).limit(5000),
-    ]);
-
-    const productsWithBom = (prods || []).map((p) => ({
-      ...p,
-      bom: (pMats || []).filter((b) => b.product_id === p.id).map((b) => ({ material_id: b.material_id, qty: b.qty })),
-      kitItems: (kitItems || []).filter((k) => k.kit_product_id === p.id).map((k) => ({ item_product_id: k.item_product_id, qty: k.qty })),
-    }));
-
-    setMaterials(mats || []);
-    setProducts(productsWithBom);
-    setSettings(st || null);
-    setQuotes(qs || []);
-    setProductionLog(plog || []);
-    setLoadingData(false);
-  }, [session]);
-
-  useEffect(() => { if (session) loadAll(); }, [session, loadAll]);
+  useEffect(() => {
+    if (!session) {
+      loadedForUserId.current = null;
+      setProfile(null);
+      return;
+    }
+    if (loadedForUserId.current === session.user.id) return;
+    loadedForUserId.current = session.user.id;
+    loadProfile(session.user.id);
+  }, [session, loadProfile]);
 
   if (session === undefined) return <FullscreenMsg text="Carregando…" />;
   if (!session) return <Login />;
-  if (loadingData || !profile || !settings) return <FullscreenMsg text="Carregando seus dados…" />;
+  if (loadingProfile || !profile) return <FullscreenMsg text="Carregando seus dados…" />;
 
   const theme = niche?.theme || FALLBACK_THEME;
   const isAdmin = profile.role === "admin";
   const plan = profile.subscription_plans || null;
-
-  /* -------------------- MATERIAIS -------------------- */
-  const saveMaterial = async (m) => {
-    const payload = { ...m, owner_id: session.user.id };
-    if (m.id) {
-      const { id, ...rest } = payload;
-      await supabase.from("materials").update(rest).eq("id", id);
-    } else {
-      await supabase.from("materials").insert(payload);
-    }
-    showToast("Material salvo.");
-    loadAll();
-  };
-  const deleteMaterial = async (id) => {
-    if (products.some((p) => (p.bom || []).some((b) => b.material_id === id))) {
-      showToast("Este material é usado em um produto. Remova-o do produto antes.", "err");
-      return;
-    }
-    await supabase.from("materials").delete().eq("id", id);
-    showToast("Material removido.");
-    loadAll();
-  };
-
-  /* -------------------- PRODUTOS -------------------- */
-  const saveProduct = async (p) => {
-    const { bom, kitItems, niches: _n, ...rest } = p;
-    const payload = { ...rest, owner_id: session.user.id, niche_id: profile.niche_id };
-    let productId = p.id;
-    if (productId) {
-      const { id, ...upd } = payload;
-      await supabase.from("products").update(upd).eq("id", id);
-      await supabase.from("product_materials").delete().eq("product_id", id);
-      await supabase.from("product_kit_items").delete().eq("kit_product_id", id);
-    } else {
-      const { data } = await supabase.from("products").insert(payload).select().single();
-      productId = data.id;
-    }
-    if ((bom || []).length) {
-      await supabase.from("product_materials").insert(bom.map((b) => ({ product_id: productId, material_id: b.material_id, qty: b.qty })));
-    }
-    if ((kitItems || []).length) {
-      await supabase.from("product_kit_items").insert(kitItems.map((k) => ({ kit_product_id: productId, item_product_id: k.item_product_id, qty: k.qty })));
-    }
-    showToast("Produto salvo.");
-    loadAll();
-  };
-  const deleteProduct = async (id) => {
-    await supabase.from("products").delete().eq("id", id);
-    showToast("Produto removido.");
-    loadAll();
-  };
-
-  /* -------------------- PRODUÇÃO (baixa de estoque) -------------------- */
-  const produce = async (product, qty) => {
-    const missing = [];
-    (product.bom || []).forEach((b) => {
-      const mat = materials.find((m) => m.id === b.material_id);
-      if (mat && mat.stock < b.qty * qty) missing.push(mat.name);
-    });
-    if (missing.length) {
-      showToast(`Estoque insuficiente: ${missing.join(", ")}`, "err");
-      return;
-    }
-    for (const b of product.bom || []) {
-      const mat = materials.find((m) => m.id === b.material_id);
-      if (!mat) continue;
-      await supabase.from("materials").update({ stock: Math.round((mat.stock - b.qty * qty) * 1000) / 1000 }).eq("id", mat.id);
-    }
-    await supabase.from("products").update({ produced_count: (product.produced_count || 0) + qty }).eq("id", product.id);
-    const calc = computeProductCost(product, materials, products, settings);
-    await supabase.from("production_log").insert({
-      owner_id: session.user.id,
-      product_id: product.id,
-      qty,
-      cost_snapshot: { subtotal: calc.subtotal, finalPrice: calc.finalPrice, profit: calc.profit },
-    });
-    showToast(`Produção registrada: ${qty}x ${product.name}.`);
-    loadAll();
-  };
-
-  /* -------------------- CONFIGURAÇÕES -------------------- */
-  const saveSettings = async (s) => {
-    await supabase.from("settings").update(s).eq("owner_id", session.user.id);
-    showToast("Configurações salvas.");
-    loadAll();
-  };
+  const ownerId = session.user.id;
+  const nicheId = profile.niche_id;
 
   const logout = async () => { await supabase.auth.signOut(); };
 
@@ -255,13 +155,13 @@ export default function App() {
         </div>
 
         <div className="app-content" style={{ padding: "32px 44px 60px", display: "flex", flexDirection: "column", gap: 22 }}>
-          {tab === "dashboard" && <Dashboard theme={theme} materials={materials} products={products} settings={settings} productionLog={productionLog} />}
-          {tab === "materiais" && <Materials theme={theme} materials={materials} onSave={saveMaterial} onDelete={deleteMaterial} maxMaterials={plan?.max_materials} />}
-          {tab === "produtos" && <Products theme={theme} products={products} materials={materials} settings={settings} onSave={saveProduct} onDelete={deleteProduct} onProduce={produce} maxProducts={plan?.max_products} />}
-          {tab === "kits" && <Kits theme={theme} products={products} materials={materials} settings={settings} onSave={saveProduct} onDelete={deleteProduct} maxProducts={plan?.max_products} />}
-          {tab === "orcamentos" && <Quotes theme={theme} products={products} materials={materials} settings={settings} quotes={quotes} onSaved={loadAll} ownerName={profile.full_name} />}
-          {tab === "relatorios" && <Reports theme={theme} products={products} materials={materials} settings={settings} productionLog={productionLog} />}
-          {tab === "config" && <SettingsPage theme={theme} settings={settings} onSave={saveSettings} />}
+          {tab === "dashboard" && <Dashboard theme={theme} />}
+          {tab === "materiais" && <Materials theme={theme} ownerId={ownerId} showToast={showToast} maxMaterials={plan?.max_materials} />}
+          {tab === "produtos" && <Products theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
+          {tab === "kits" && <Kits theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
+          {tab === "orcamentos" && <Quotes theme={theme} showToast={showToast} ownerName={profile.full_name} />}
+          {tab === "relatorios" && <Reports theme={theme} />}
+          {tab === "config" && <SettingsPage theme={theme} ownerId={ownerId} showToast={showToast} />}
           {tab === "admin" && isAdmin && <Admin theme={theme} />}
         </div>
       </div>

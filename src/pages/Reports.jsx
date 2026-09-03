@@ -1,20 +1,36 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Package, Wallet, Receipt, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard } from "../components/ui.jsx";
 import { brl, monthKey, productionLogValue } from "../pricing.js";
+import { useCatalogData, fetchProductionLogSince } from "../data.js";
+
+const MONTHS_WINDOW = 6;
 
 function monthLabel(key) {
   const [y, m] = key.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
 }
 
-export default function Reports({ theme, products, materials, settings, productionLog }) {
+export default function Reports({ theme }) {
+  const { materials, products, settings, loading: loadingCatalog } = useCatalogData();
+  const [productionLog, setProductionLog] = useState([]);
+  const [loadingLog, setLoadingLog] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
+
+  useEffect(() => {
+    const now = new Date();
+    const since = new Date(now.getFullYear(), now.getMonth() - (MONTHS_WINDOW - 1), 1);
+    fetchProductionLogSince(since).then((rows) => {
+      setProductionLog(rows);
+      setLoadingLog(false);
+    });
+  }, []);
 
   const productsById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
 
   const enriched = useMemo(() => {
+    if (!settings) return [];
     return productionLog.map((log) => {
       const product = productsById[log.product_id];
       const { subtotal, finalPrice, profit } = productionLogValue(log, product, materials, products, settings);
@@ -32,7 +48,7 @@ export default function Reports({ theme, products, materials, settings, producti
   const monthsSeries = useMemo(() => {
     const now = new Date();
     const keys = [];
-    for (let i = 5; i >= 0; i--) {
+    for (let i = MONTHS_WINDOW - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       keys.push(monthKey(d));
     }
@@ -71,6 +87,8 @@ export default function Reports({ theme, products, materials, settings, producti
     });
     return Array.from(map.values()).sort((a, b) => b.profit - a.profit).slice(0, 8);
   }, [monthRows]);
+
+  if (loadingCatalog || loadingLog) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando relatórios…</div>;
 
   if (productionLog.length === 0) {
     return (

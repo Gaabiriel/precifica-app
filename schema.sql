@@ -263,6 +263,9 @@ create policy "materials_owner" on public.materials for all
 create policy "price_history_owner" on public.material_price_history for select
   using (exists(select 1 from public.materials m where m.id = material_id and m.owner_id = auth.uid()));
 
+create policy "price_history_insert" on public.material_price_history for insert
+  with check (exists(select 1 from public.materials m where m.id = material_id and m.owner_id = auth.uid()));
+
 -- products
 create policy "products_owner" on public.products for all
   using (owner_id = auth.uid())

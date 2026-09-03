@@ -1,14 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, History, Upload, X, ImageOff, Lock } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader, Spinner } from "../components/ui.jsx";
 import { brl } from "../pricing.js";
 import { supabase } from "../supabaseClient";
+import { fetchMaterials, saveMaterial, deleteMaterial } from "../data.js";
 
 const PAGE_SIZE = 10;
 const MAX_IMAGES = 5;
 
-export default function Materials({ theme, materials, onSave, onDelete, maxMaterials }) {
+export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
+  const [materials, setMaterials] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const loadedOnce = useRef(false);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [onlyLowStock, setOnlyLowStock] = useState(false);
@@ -19,6 +24,34 @@ export default function Materials({ theme, materials, onSave, onDelete, maxMater
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showLimitInfo, setShowLimitInfo] = useState(false);
   const atLimit = maxMaterials != null && materials.length >= maxMaterials;
+
+  const reload = useCallback(async () => {
+    if (loadedOnce.current) setRefreshing(true);
+    const mats = await fetchMaterials();
+    setMaterials(mats);
+    loadedOnce.current = true;
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+
+  const handleSave = async (m) => {
+    const { error } = await saveMaterial(ownerId, m);
+    if (error) { showToast("Erro ao salvar material.", "err"); return; }
+    showToast("Material salvo.");
+    setModal(null);
+    reload();
+  };
+  const handleDelete = async (id) => {
+    const { error } = await deleteMaterial(id);
+    setDeleteTarget(null);
+    if (error) {
+      showToast(error.code === "23503" ? "Este material é usado em um produto. Remova-o do produto antes." : "Erro ao excluir.", "err");
+      return;
+    }
+    showToast("Material removido.");
+    reload();
+  };
 
   const categories = useMemo(
     () => Array.from(new Set(materials.map((m) => m.category).filter(Boolean))).sort(),
@@ -46,6 +79,8 @@ export default function Materials({ theme, materials, onSave, onDelete, maxMater
 
   const toggleSort = (field) => setSort((s) => (s.field === field ? { field, dir: s.dir === "asc" ? "desc" : "asc" } : { field, dir: "asc" }));
 
+  if (loading) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando materiais…</div>;
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
@@ -60,9 +95,12 @@ export default function Materials({ theme, materials, onSave, onDelete, maxMater
             Só estoque baixo
           </label>
         </div>
-        <Button theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
-          {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo material
-        </Button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {refreshing && <Spinner theme={theme} />}
+          <Button theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
+            {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo material
+          </Button>
+        </div>
       </div>
 
       <Card theme={theme} className="materials-table-view" style={{ overflow: "hidden" }}>
@@ -133,14 +171,14 @@ export default function Materials({ theme, materials, onSave, onDelete, maxMater
 
       <Pagination theme={theme} page={currentPage} totalPages={totalPages} onChange={setPage} />
 
-      {modal && <MaterialModal theme={theme} material={modal} onClose={() => setModal(null)} onSave={(m) => { onSave(m); setModal(null); }} />}
+      {modal && <MaterialModal theme={theme} material={modal} onClose={() => setModal(null)} onSave={handleSave} />}
       {historyOf && <PriceHistoryModal theme={theme} material={historyOf} onClose={() => setHistoryOf(null)} />}
       {deleteTarget && (
         <ConfirmModal
           theme={theme}
           message={`Tem certeza que quer excluir "${deleteTarget.name}"? Essa ação não pode ser desfeita.`}
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => { onDelete(deleteTarget.id); setDeleteTarget(null); }}
+          onConfirm={() => handleDelete(deleteTarget.id)}
         />
       )}
       {showLimitInfo && (

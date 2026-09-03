@@ -2,6 +2,15 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ImageOff, MoreVertical } from "lucide-react";
 
+export function Spinner({ theme, size = 15, style }) {
+  return (
+    <span
+      className="app-spinner"
+      style={{ width: size, height: size, color: theme?.textMuted || "#999", ...style }}
+    />
+  );
+}
+
 export function Card({ theme, children, style, ...rest }) {
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, boxShadow: "0 1px 2px rgba(16,24,40,0.04)", ...style }} {...rest}>

@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, FileDown, FileText, ChevronRight, MessageCircle } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Card, Button, Field, inputStyle, iconBtn, Row, Modal } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Row, Modal, Spinner } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
+import { useCatalogData, fetchQuotes } from "../data.js";
 
 function fmtDate(d) {
   if (!d) return "";
@@ -74,7 +75,12 @@ function sendWhatsapp(quoteLike) {
   window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, "_blank");
 }
 
-export default function Quotes({ theme, products, materials, settings, quotes, onSaved, ownerName }) {
+export default function Quotes({ theme, showToast, ownerName }) {
+  const { materials, products, settings, loading: loadingCatalog } = useCatalogData();
+  const [quotes, setQuotes] = useState([]);
+  const [loadingQuotes, setLoadingQuotes] = useState(true);
+  const [refreshingQuotes, setRefreshingQuotes] = useState(false);
+  const loadedQuotesOnce = useRef(false);
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
   const [validUntil, setValidUntil] = useState("");
@@ -83,8 +89,18 @@ export default function Quotes({ theme, products, materials, settings, quotes, o
   const [saving, setSaving] = useState(false);
   const [detailQuote, setDetailQuote] = useState(null);
 
+  const reloadQuotes = useCallback(async () => {
+    if (loadedQuotesOnce.current) setRefreshingQuotes(true);
+    const qs = await fetchQuotes(10);
+    setQuotes(qs);
+    loadedQuotesOnce.current = true;
+    setLoadingQuotes(false);
+    setRefreshingQuotes(false);
+  }, []);
+  useEffect(() => { reloadQuotes(); }, [reloadQuotes]);
+
   const productCosts = useMemo(
-    () => products.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })),
+    () => (settings ? products.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
     [products, materials, settings]
   );
 
@@ -117,7 +133,7 @@ export default function Quotes({ theme, products, materials, settings, quotes, o
     if (!clientName.trim() || rows.length === 0) return;
     setSaving(true);
     const { data: userData } = await supabase.auth.getUser();
-    await supabase.from("quotes").insert({
+    const { error } = await supabase.from("quotes").insert({
       owner_id: userData.user.id,
       client_name: clientName,
       client_contact: clientContact,
@@ -127,9 +143,13 @@ export default function Quotes({ theme, products, materials, settings, quotes, o
       total,
     });
     setSaving(false);
+    if (error) { showToast("Erro ao salvar orçamento.", "err"); return; }
     setClientName(""); setClientContact(""); setValidUntil(""); setNotes(""); setItems([]);
-    onSaved();
+    showToast("Orçamento salvo.");
+    reloadQuotes();
   };
+
+  if (loadingCatalog || loadingQuotes) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando orçamentos…</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -166,8 +186,9 @@ export default function Quotes({ theme, products, materials, settings, quotes, o
       </Card>
 
       <Card theme={theme} style={{ overflow: "hidden" }}>
-        <div style={{ padding: "16px 20px", fontSize: 15, fontWeight: 800, borderBottom: `1px solid ${theme.border}` }}>
+        <div style={{ padding: "16px 20px", fontSize: 15, fontWeight: 800, borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", gap: 10 }}>
           Histórico de orçamentos
+          {refreshingQuotes && <Spinner theme={theme} />}
         </div>
         {quotes.length === 0 ? (
           <div style={{ padding: 24, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>Nenhum orçamento salvo ainda.</div>

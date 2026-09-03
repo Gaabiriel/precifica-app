@@ -1,10 +1,32 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Save, Info } from "lucide-react";
 import { Card, Button, Field, inputStyle } from "../components/ui.jsx";
+import { fetchSettings, saveSettingsRow } from "../data.js";
 
-export default function SettingsPage({ theme, settings, onSave }) {
-  const [form, setForm] = useState(settings);
+export default function SettingsPage({ theme, ownerId, showToast }) {
+  const [settings, setSettings] = useState(null);
+  const [form, setForm] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSettings().then((st) => {
+      setSettings(st);
+      setForm(st);
+      setLoading(false);
+    });
+  }, []);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    const { error } = await saveSettingsRow(ownerId, form);
+    if (error) { showToast("Erro ao salvar configurações.", "err"); return; }
+    setSettings(form);
+    showToast("Configurações salvas.");
+  };
+
+  if (loading || !form) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando configurações…</div>;
+
   const dirty = JSON.stringify(form) !== JSON.stringify(settings);
 
   return (
@@ -28,7 +50,7 @@ export default function SettingsPage({ theme, settings, onSave }) {
         </label>
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
-          <Button theme={theme} onClick={() => onSave(form)} style={{ opacity: dirty ? 1 : 0.5 }}><Save size={14} /> Salvar configurações</Button>
+          <Button theme={theme} onClick={handleSave} style={{ opacity: dirty ? 1 : 0.5 }}><Save size={14} /> Salvar configurações</Button>
         </div>
       </Card>
 

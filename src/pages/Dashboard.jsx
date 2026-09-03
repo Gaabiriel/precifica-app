@@ -1,18 +1,42 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ShoppingBag, Boxes, Percent, AlertTriangle, Wallet } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard, Button, Modal } from "../components/ui.jsx";
-import { brl, computeProductCost, monthKey, productionLogValue } from "../pricing.js";
+import { brl, computeProductCost, productionLogValue } from "../pricing.js";
+import { fetchMaterials, fetchProductsFull, fetchSettings, fetchProductionLogSince } from "../data.js";
 
 const LOW_STOCK_PREVIEW = 5;
 
-export default function Dashboard({ theme, materials, products, settings, productionLog }) {
+export default function Dashboard({ theme }) {
+  const [materials, setMaterials] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [settings, setSettings] = useState(null);
+  const [productionLog, setProductionLog] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAllLowStock, setShowAllLowStock] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    Promise.all([fetchMaterials(), fetchProductsFull(), fetchSettings(), fetchProductionLogSince(monthStart)]).then(
+      ([mats, prods, st, plog]) => {
+        if (cancelled) return;
+        setMaterials(mats);
+        setProducts(prods);
+        setSettings(st);
+        setProductionLog(plog);
+        setLoading(false);
+      }
+    );
+    return () => { cancelled = true; };
+  }, []);
+
   const lowStock = useMemo(() => materials.filter((m) => Number(m.stock) <= Number(m.min_stock)), [materials]);
   const stockValue = useMemo(() => materials.reduce((s, m) => s + m.price * m.stock, 0), [materials]);
 
   const productCosts = useMemo(
-    () => products.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })),
+    () => (settings ? products.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
     [products, materials, settings]
   );
   const avgMargin = useMemo(() => {
@@ -21,11 +45,12 @@ export default function Dashboard({ theme, materials, products, settings, produc
   }, [productCosts]);
 
   const monthlyProfit = useMemo(() => {
-    const currentMonth = monthKey(new Date());
+    if (!settings) return 0;
     const productsById = Object.fromEntries(products.map((p) => [p.id, p]));
-    return (productionLog || [])
-      .filter((log) => monthKey(log.produced_at) === currentMonth)
-      .reduce((sum, log) => sum + productionLogValue(log, productsById[log.product_id], materials, products, settings).profit * log.qty, 0);
+    return (productionLog || []).reduce(
+      (sum, log) => sum + productionLogValue(log, productsById[log.product_id], materials, products, settings).profit * log.qty,
+      0
+    );
   }, [productionLog, products, materials, settings]);
 
   const chartData = productCosts.slice(0, 8).map((p) => ({
@@ -33,6 +58,8 @@ export default function Dashboard({ theme, materials, products, settings, produc
     Custo: Math.round(p.calc.subtotal * 100) / 100,
     Venda: Math.round(p.calc.finalPrice * 100) / 100,
   }));
+
+  if (loading) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando painel…</div>;
 
   return (
     <div>
