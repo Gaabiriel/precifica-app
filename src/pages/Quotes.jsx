@@ -13,12 +13,40 @@ function fmtDate(d) {
   return date.toLocaleDateString("pt-BR");
 }
 
-function buildQuotePdf({ client_name, client_contact, created_at, valid_until, notes, items, total }) {
+/** Baixa a logo e devolve como data URL (jsPDF precisa dos bytes, não só da URL), já com as dimensões naturais pra não distorcer ao desenhar. */
+function loadLogoAsset(url) {
+  return fetch(url)
+    .then((res) => res.blob())
+    .then(
+      (blob) =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const dataUrl = reader.result;
+            const img = new Image();
+            img.onload = () => resolve({ dataUrl, format: blob.type.includes("png") ? "PNG" : "JPEG", width: img.naturalWidth, height: img.naturalHeight });
+            img.onerror = reject;
+            img.src = dataUrl;
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        })
+    );
+}
+
+function buildQuotePdf({ client_name, client_contact, created_at, valid_until, notes, items, total, logo }) {
   const doc = new jsPDF();
+  let y = 18;
+  if (logo) {
+    const width = 32;
+    const height = (logo.height / logo.width) * width;
+    doc.addImage(logo.dataUrl, logo.format, 14, 10, width, height);
+    y = 10 + height + 10;
+  }
   doc.setFontSize(16);
-  doc.text("Orçamento", 14, 18);
+  doc.text("Orçamento", 14, y);
   doc.setFontSize(10);
-  let y = 26;
+  y += 8;
   doc.text(`Cliente: ${client_name || "—"}`, 14, y);
   if (client_contact) { y += 6; doc.text(`Contato: ${client_contact}`, 14, y); }
   y += 6;
@@ -75,12 +103,13 @@ function sendWhatsapp(quoteLike) {
   window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, "_blank");
 }
 
-export default function Quotes({ theme, showToast, ownerName }) {
+export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
   const { materials, products, settings, loading: loadingCatalog } = useCatalogData();
   const [quotes, setQuotes] = useState([]);
   const [loadingQuotes, setLoadingQuotes] = useState(true);
   const [refreshingQuotes, setRefreshingQuotes] = useState(false);
   const loadedQuotesOnce = useRef(false);
+  const [logoAsset, setLogoAsset] = useState(null);
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
   const [validUntil, setValidUntil] = useState("");
@@ -98,6 +127,13 @@ export default function Quotes({ theme, showToast, ownerName }) {
     setRefreshingQuotes(false);
   }, []);
   useEffect(() => { reloadQuotes(); }, [reloadQuotes]);
+
+  useEffect(() => {
+    if (!logoUrl) { setLogoAsset(null); return; }
+    let cancelled = false;
+    loadLogoAsset(logoUrl).then((asset) => { if (!cancelled) setLogoAsset(asset); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [logoUrl]);
 
   const productCosts = useMemo(
     () => (settings ? products.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
@@ -124,6 +160,7 @@ export default function Quotes({ theme, showToast, ownerName }) {
     items: rows.map((r) => ({ product_id: r.product_id, name: r.name, qty: r.qty, unit_price: r.unitPrice })),
     total,
     ownerName,
+    logo: logoAsset,
   });
 
   const generatePdf = () => buildQuotePdf(currentQuoteData());
@@ -154,7 +191,10 @@ export default function Quotes({ theme, showToast, ownerName }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <Card theme={theme} style={{ padding: 20 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Novo orçamento</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          {logoUrl && <img src={logoUrl} alt="" style={{ height: 28, maxWidth: 90, objectFit: "contain" }} />}
+          <div style={{ fontSize: 16, fontWeight: 800 }}>Novo orçamento</div>
+        </div>
         <div style={{ display: "flex", gap: 10, maxWidth: 780, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 220px" }}><Field label="Nome do cliente"><input style={inputStyle(theme)} value={clientName} onChange={(e) => setClientName(e.target.value)} /></Field></div>
           <div style={{ flex: "1 1 220px" }}><Field label="Contato (telefone/WhatsApp)" hint="Usado pra montar o link de envio"><input style={inputStyle(theme)} value={clientContact} onChange={(e) => setClientContact(e.target.value)} placeholder="(11) 91234-5678" /></Field></div>
@@ -232,15 +272,18 @@ export default function Quotes({ theme, showToast, ownerName }) {
         )}
       </Card>
 
-      {detailQuote && <QuoteDetailModal theme={theme} quote={{ ...detailQuote, ownerName }} onClose={() => setDetailQuote(null)} />}
+      {detailQuote && (
+        <QuoteDetailModal theme={theme} quote={{ ...detailQuote, ownerName, logo: logoAsset }} logoUrl={logoUrl} onClose={() => setDetailQuote(null)} />
+      )}
     </div>
   );
 }
 
-function QuoteDetailModal({ theme, quote, onClose }) {
+function QuoteDetailModal({ theme, quote, logoUrl, onClose }) {
   const items = quote.items || [];
   return (
     <Modal theme={theme} title={`Orçamento — ${quote.client_name}`} onClose={onClose} width={520}>
+      {logoUrl && <img src={logoUrl} alt="" style={{ height: 32, maxWidth: 120, objectFit: "contain", marginBottom: 10 }} />}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 12.5, color: theme.textMuted, marginBottom: 14 }}>
         <span>Emitido em {fmtDate(quote.created_at)}</span>
         {quote.client_contact && <span>· {quote.client_contact}</span>}

@@ -67,6 +67,18 @@ export default function App() {
     loadProfile(session.user.id);
   }, [session, loadProfile]);
 
+  // ---- favicon do navegador: usa a logo do usuário logado, quando existir ----
+  useEffect(() => {
+    if (!profile?.logo_url) return;
+    let link = document.querySelector('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.href = profile.logo_url;
+  }, [profile?.logo_url]);
+
   if (session === undefined) return <FullscreenMsg text="Carregando…" />;
   if (!session) return <Login />;
   if (loadingProfile || !profile) return <FullscreenMsg text="Carregando seus dados…" />;
@@ -97,10 +109,16 @@ export default function App() {
       {/* sidebar */}
       <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ width: 236, flexShrink: 0, background: theme.surface, borderRight: `1px solid ${theme.border}`, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "22px 20px 20px" }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Tag size={16} color="#fff" />
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.3px" }}>Precifica</div>
+          {profile.logo_url ? (
+            <img src={profile.logo_url} alt="" style={{ maxWidth: 160, maxHeight: 44, objectFit: "contain" }} />
+          ) : (
+            <>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Tag size={16} color="#fff" />
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.3px" }}>Precifica</div>
+            </>
+          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "8px 12px" }}>
@@ -159,9 +177,17 @@ export default function App() {
           {tab === "materiais" && <Materials theme={theme} ownerId={ownerId} showToast={showToast} maxMaterials={plan?.max_materials} />}
           {tab === "produtos" && <Products theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
           {tab === "kits" && <Kits theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
-          {tab === "orcamentos" && <Quotes theme={theme} showToast={showToast} ownerName={profile.full_name} />}
+          {tab === "orcamentos" && <Quotes theme={theme} showToast={showToast} ownerName={profile.full_name} logoUrl={profile.logo_url} />}
           {tab === "relatorios" && <Reports theme={theme} />}
-          {tab === "config" && <SettingsPage theme={theme} ownerId={ownerId} showToast={showToast} />}
+          {tab === "config" && (
+            <SettingsPage
+              theme={theme}
+              ownerId={ownerId}
+              showToast={showToast}
+              logoUrl={profile.logo_url}
+              onLogoChange={(url) => setProfile((p) => ({ ...p, logo_url: url }))}
+            />
+          )}
           {tab === "admin" && isAdmin && <Admin theme={theme} />}
         </div>
       </div>

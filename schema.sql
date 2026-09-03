@@ -37,6 +37,7 @@ create table public.profiles (
   email text not null,
   full_name text,
   niche_id uuid references public.niches(id),
+  logo_url text,
   role text not null default 'user' check (role in ('admin','user')),
   plan_id uuid references public.subscription_plans(id),
   subscription_status text not null default 'trialing'

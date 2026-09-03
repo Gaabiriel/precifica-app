@@ -144,3 +144,7 @@ export async function produceProduct({ ownerId, product, qty, materials, product
 export async function saveSettingsRow(ownerId, s) {
   return supabase.from("settings").update(s).eq("owner_id", ownerId);
 }
+
+export async function updateProfileLogo(ownerId, logoUrl) {
+  return supabase.from("profiles").update({ logo_url: logoUrl }).eq("id", ownerId);
+}

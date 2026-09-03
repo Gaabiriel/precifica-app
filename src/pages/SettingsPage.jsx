@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Save, Info } from "lucide-react";
-import { Card, Button, Field, inputStyle } from "../components/ui.jsx";
-import { fetchSettings, saveSettingsRow } from "../data.js";
+import { Save, Info, Upload, X } from "lucide-react";
+import { Card, Button, Field, inputStyle, Spinner } from "../components/ui.jsx";
+import { fetchSettings, saveSettingsRow, updateProfileLogo } from "../data.js";
+import { supabase } from "../supabaseClient";
 
-export default function SettingsPage({ theme, ownerId, showToast }) {
+export default function SettingsPage({ theme, ownerId, showToast, logoUrl, onLogoChange }) {
   const [settings, setSettings] = useState(null);
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   useEffect(() => {
     fetchSettings().then((st) => {
@@ -25,12 +27,54 @@ export default function SettingsPage({ theme, ownerId, showToast }) {
     showToast("Configurações salvas.");
   };
 
+  const uploadLogo = async (fileList) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    const ext = file.name.split(".").pop();
+    const path = `${ownerId}/logo-${crypto.randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("product-images").upload(path, file);
+    if (uploadError) { showToast("Erro ao enviar a logo.", "err"); setUploadingLogo(false); return; }
+    const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+    const { error } = await updateProfileLogo(ownerId, data.publicUrl);
+    setUploadingLogo(false);
+    if (error) { showToast("Erro ao salvar a logo.", "err"); return; }
+    onLogoChange(data.publicUrl);
+    showToast("Logo atualizada.");
+  };
+
+  const removeLogo = async () => {
+    const { error } = await updateProfileLogo(ownerId, null);
+    if (error) { showToast("Erro ao remover a logo.", "err"); return; }
+    onLogoChange(null);
+    showToast("Logo removida.");
+  };
+
   if (loading || !form) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando configurações…</div>;
 
   const dirty = JSON.stringify(form) !== JSON.stringify(settings);
 
   return (
     <div>
+      <Card theme={theme} style={{ padding: 24, marginBottom: 20 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Logo do negócio</div>
+        <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 16 }}>Aparece na barra lateral e como ícone da aba do navegador, só pra sua conta.</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 96, height: 96, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+            {logoUrl ? <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <span style={{ fontSize: 11, color: theme.textMuted }}>Sem logo</span>}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${theme.border}`, color: theme.text }}>
+              {uploadingLogo ? <Spinner theme={theme} /> : <Upload size={14} />} {logoUrl ? "Trocar logo" : "Enviar logo"}
+              <input type="file" accept="image/*" disabled={uploadingLogo} onChange={(e) => uploadLogo(e.target.files)} style={{ display: "none" }} />
+            </label>
+            {logoUrl && (
+              <Button theme={theme} variant="ghost" onClick={removeLogo}><X size={14} /> Remover</Button>
+            )}
+          </div>
+        </div>
+      </Card>
+
       <Card theme={theme} style={{ padding: 24 }}>
         <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Parâmetros de precificação</div>
         <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 20 }}>Esses valores entram automaticamente no cálculo de custo de todos os produtos.</div>
