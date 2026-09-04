@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ShoppingBag, Boxes, Percent, AlertTriangle, Wallet, DollarSign, Plus, X, ChevronLeft, ChevronRight,
-  Factory, Award, PiggyBank,
+  Factory, Award, PiggyBank, Trash2, Check, ListChecks,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard, Button, Modal, inputStyle } from "../components/ui.jsx";
@@ -9,6 +9,7 @@ import { brl, computeProductCost, productionLogValue } from "../pricing.js";
 import {
   fetchMaterials, fetchProductsFull, fetchSettings, fetchProductionLogSince,
   fetchQuotes, fetchAllTimeProfit, updateDashboardWidgets, produceProduct,
+  fetchReminders, addReminder, toggleReminder, deleteReminder,
 } from "../data.js";
 
 const LOW_STOCK_PREVIEW = 5;
@@ -26,13 +27,14 @@ function statDef(label, build) {
 }
 
 const WIDGET_DEFS = {
-  welcome: {
-    label: "Mensagem de boas-vindas", size: "wide",
-    Widget: ({ ctx }) => <WelcomeWidget theme={ctx.theme} ownerName={ctx.ownerName} />,
-  },
-  calendar: {
-    label: "Calendário", size: "medium",
-    Widget: ({ ctx }) => <CalendarWidget theme={ctx.theme} />,
+  lembretes: {
+    label: "Lembretes", size: "list",
+    Widget: ({ ctx }) => (
+      <RemindersWidget
+        theme={ctx.theme} reminders={ctx.reminders} ownerId={ctx.ownerId}
+        onAdd={ctx.onAddReminder} onToggle={ctx.onToggleReminder} onDelete={ctx.onDeleteReminder}
+      />
+    ),
   },
   acoes_rapidas: {
     label: "Ações rápidas", size: "wide",
@@ -67,7 +69,9 @@ const WIDGET_DEFS = {
   },
   materiais_acabando: {
     label: "Lista: Materiais acabando", size: "list",
-    Widget: ({ ctx }) => <LowStockWidget theme={ctx.theme} lowStock={ctx.lowStock} onShowAll={ctx.onShowAllLowStock} />,
+    Widget: ({ ctx }) => (
+      <LowStockWidget theme={ctx.theme} lowStock={ctx.lowStock} onShowAll={ctx.onShowAllLowStock} onAddReminder={ctx.onAddReminder} />
+    ),
   },
   ultimos_orcamentos: {
     label: "Últimos orçamentos", size: "list",
@@ -79,7 +83,7 @@ const WIDGET_DEFS = {
   },
 };
 
-const DEFAULT_WIDGETS = ["welcome", "calendar", "produtos", "materiais", "margem", "lucro_mes", "alertas", "grafico_custo_venda", "materiais_acabando"];
+const DEFAULT_WIDGETS = ["produtos", "materiais", "margem", "lucro_mes", "alertas", "lembretes", "grafico_custo_venda", "materiais_acabando"];
 
 export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuickNavigate }) {
   const [materials, setMaterials] = useState([]);
@@ -88,6 +92,7 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
   const [productionLog, setProductionLog] = useState([]);
   const [quotes, setQuotes] = useState([]);
   const [allTimeProfit, setAllTimeProfit] = useState(0);
+  const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAllLowStock, setShowAllLowStock] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState(DEFAULT_WIDGETS);
@@ -106,9 +111,9 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
   const loadAll = useCallback(async () => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [mats, prods, st, plog, qs, allProfit] = await Promise.all([
+    const [mats, prods, st, plog, qs, allProfit, rems] = await Promise.all([
       fetchMaterials(), fetchProductsFull(), fetchSettings(), fetchProductionLogSince(monthStart),
-      fetchQuotes(50), fetchAllTimeProfit(),
+      fetchQuotes(50), fetchAllTimeProfit(), fetchReminders(),
     ]);
     setMaterials(mats);
     setProducts(prods);
@@ -116,12 +121,38 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
     setProductionLog(plog);
     setQuotes(qs);
     setAllTimeProfit(allProfit);
-    setWidgetOrder((prev) => (loadedOnceRef.current ? prev : (Array.isArray(st?.dashboard_widgets) ? st.dashboard_widgets : DEFAULT_WIDGETS)));
-    loadedOnceRef.current = true;
+    setReminders(rems);
+    // só aplica a ordem de widgets salva na PRIMEIRA carga desta montagem —
+    // recarregas depois (ex.: após registrar produção) não devem mexer no
+    // layout que a pessoa já está vendo. Precisa ser um `if` simples e não
+    // um updater funcional: o updater só roda depois (fase de render), e
+    // por essa altura `loadedOnceRef.current` já teria virado `true` de
+    // qualquer forma, fazendo essa checagem sempre falhar mesmo na primeira vez.
+    if (!loadedOnceRef.current) {
+      setWidgetOrder(Array.isArray(st?.dashboard_widgets) ? st.dashboard_widgets : DEFAULT_WIDGETS);
+      loadedOnceRef.current = true;
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  const reloadReminders = () => fetchReminders().then(setReminders);
+  const handleAddReminder = async (text) => {
+    const { error } = await addReminder(ownerId, text);
+    if (error) { showToast("Erro ao adicionar lembrete.", "err"); return; }
+    reloadReminders();
+  };
+  const handleToggleReminder = async (id, done) => {
+    const { error } = await toggleReminder(id, done);
+    if (error) { showToast("Erro ao atualizar lembrete.", "err"); return; }
+    reloadReminders();
+  };
+  const handleDeleteReminder = async (id) => {
+    const { error } = await deleteReminder(id);
+    if (error) { showToast("Erro ao excluir lembrete.", "err"); return; }
+    reloadReminders();
+  };
 
   const persistWidgets = (next) => {
     setWidgetOrder(next);
@@ -191,14 +222,24 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
 
   const ctx = {
     theme, materials, products, settings, lowStock, stockValue, avgMargin, monthlyProfit, monthlyUnits,
-    chartData, ownerName, ownerId, quotes, allTimeProfit, topProduct, showToast,
+    chartData, ownerName, ownerId, quotes, allTimeProfit, topProduct, showToast, reminders,
     onQuickNavigate, reload: loadAll,
     onShowAllLowStock: () => setShowAllLowStock(true),
+    onAddReminder: handleAddReminder, onToggleReminder: handleToggleReminder, onDeleteReminder: handleDeleteReminder,
   };
   const availableToAdd = Object.keys(WIDGET_DEFS).filter((id) => !widgetOrder.includes(id));
 
   return (
     <div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={SIZE_STYLE.wide}>
+          <WelcomeWidget theme={theme} ownerName={ownerName} />
+        </div>
+        <div style={SIZE_STYLE.medium}>
+          <CalendarWidget theme={theme} />
+        </div>
+      </div>
+
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
         {widgetOrder.map((id) => {
           const def = WIDGET_DEFS[id];
@@ -456,7 +497,7 @@ function ChartWidget({ theme, chartData }) {
   );
 }
 
-function LowStockWidget({ theme, lowStock, onShowAll }) {
+function LowStockWidget({ theme, lowStock, onShowAll, onAddReminder }) {
   return (
     <Card theme={theme} style={{ padding: 18, height: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -469,9 +510,71 @@ function LowStockWidget({ theme, lowStock, onShowAll }) {
       </div>
       {lowStock.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted }}>Tudo certo por aqui.</div>}
       {lowStock.slice(0, LOW_STOCK_PREVIEW).map((m) => (
-        <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${theme.border}`, fontSize: 13 }}>
-          <span>{m.name}</span>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, fontWeight: 600, color: theme.danger, background: `${theme.danger}1A`, borderRadius: 5, padding: "2px 7px" }}>{m.stock} {m.unit}</span>
+        <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${theme.border}`, fontSize: 13 }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, fontWeight: 600, color: theme.danger, background: `${theme.danger}1A`, borderRadius: 5, padding: "2px 7px" }}>{m.stock} {m.unit}</span>
+            {onAddReminder && (
+              <button
+                onClick={() => onAddReminder(`Comprar ${m.name}`)}
+                title="Adicionar como lembrete"
+                style={{ width: 20, height: 20, borderRadius: "50%", border: "none", background: theme.surfaceAlt, color: theme.textMuted, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+              >
+                <Plus size={12} />
+              </button>
+            )}
+          </span>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function RemindersWidget({ theme, reminders, onAdd, onToggle, onDelete }) {
+  const [text, setText] = useState("");
+
+  const submit = () => {
+    if (!text.trim()) return;
+    onAdd(text.trim());
+    setText("");
+  };
+
+  return (
+    <Card theme={theme} style={{ padding: 18, height: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <ListChecks size={15} color={theme.primary} />
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Lembretes</div>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="Ex: Comprar fita adesiva…"
+          style={{ ...inputStyle(theme), flex: 1, padding: "7px 10px", fontSize: 12.5 }}
+        />
+        <button onClick={submit} style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: theme.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+          <Plus size={15} />
+        </button>
+      </div>
+      {reminders.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted }}>Nenhum lembrete por aqui.</div>}
+      {reminders.map((r) => (
+        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${theme.border}` }}>
+          <button
+            onClick={() => onToggle(r.id, !r.done)}
+            style={{
+              width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${r.done ? theme.good : theme.border}`,
+              background: r.done ? theme.good : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, padding: 0,
+            }}
+          >
+            {r.done && <Check size={12} />}
+          </button>
+          <span style={{ flex: 1, fontSize: 13, color: r.done ? theme.textMuted : theme.text, textDecoration: r.done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {r.text}
+          </span>
+          <button onClick={() => onDelete(r.id)} style={{ background: "none", border: "none", color: theme.textMuted, cursor: "pointer", display: "flex", flexShrink: 0, padding: 0 }}>
+            <Trash2 size={13} />
+          </button>
         </div>
       ))}
     </Card>

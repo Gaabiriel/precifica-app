@@ -173,6 +173,23 @@ export async function updateProfileLogo(ownerId, logoUrl) {
   return supabase.from("profiles").update({ logo_url: logoUrl }).eq("id", ownerId);
 }
 
+export async function fetchReminders() {
+  const { data } = await supabase.from("reminders").select("*").order("done", { ascending: true }).order("created_at", { ascending: false });
+  return data || [];
+}
+
+export async function addReminder(ownerId, text) {
+  return supabase.from("reminders").insert({ owner_id: ownerId, text });
+}
+
+export async function toggleReminder(id, done) {
+  return supabase.from("reminders").update({ done }).eq("id", id);
+}
+
+export async function deleteReminder(id) {
+  return supabase.from("reminders").delete().eq("id", id);
+}
+
 export async function updateDashboardWidgets(ownerId, widgetIds) {
   return supabase.from("settings").update({ dashboard_widgets: widgetIds }).eq("owner_id", ownerId);
 }

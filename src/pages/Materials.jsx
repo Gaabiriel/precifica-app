@@ -290,7 +290,7 @@ function MaterialModal({ theme, material, categories, onClose, onSave }) {
           <Field label="Estoque atual"><input type="number" step="0.01" style={inputStyle(theme)} value={form.stock} onChange={(e) => set("stock", parseFloat(e.target.value) || 0)} /></Field>
         </div>
         <div style={{ flex: 1 }}>
-          <Field label="Estoque mínimo"><input type="number" step="0.01" style={inputStyle(theme)} value={form.min_stock} onChange={(e) => set("min_stock", parseFloat(e.target.value) || 0)} /></Field>
+          <Field label="Estoque mínimo" hint="Abaixo disso, entra em 'Materiais acabando' e nos alertas."><input type="number" step="0.01" style={inputStyle(theme)} value={form.min_stock} onChange={(e) => set("min_stock", parseFloat(e.target.value) || 0)} /></Field>
         </div>
         <div style={{ flex: 1 }}>
           <Field label="% de perda" hint="Sobra de corte, quebra…"><input type="number" step="0.1" style={inputStyle(theme)} value={form.waste_percent} onChange={(e) => set("waste_percent", parseFloat(e.target.value) || 0)} /></Field>

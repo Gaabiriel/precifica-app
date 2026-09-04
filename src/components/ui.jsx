@@ -105,11 +105,14 @@ export function StatCard({ theme, icon: Icon, label, value, sub, tone }) {
   );
 }
 
-export function Row({ theme, label, value, bold, tone }) {
+export function Row({ theme, label, value, bold, tone, hint }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}>
-      <span style={{ color: theme.textMuted }}>{label}</span>
-      <span style={{ fontWeight: bold ? 700 : 600, color: tone || theme.text }}>{value}</span>
+    <div style={{ padding: "3px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+        <span style={{ color: theme.textMuted }}>{label}</span>
+        <span style={{ fontWeight: bold ? 700 : 600, color: tone || theme.text }}>{value}</span>
+      </div>
+      {hint && <div style={{ fontSize: 10.5, color: theme.textMuted, opacity: 0.75, marginTop: 1, lineHeight: 1.3 }}>{hint}</div>}
     </div>
   );
 }

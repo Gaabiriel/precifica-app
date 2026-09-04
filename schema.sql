@@ -63,6 +63,16 @@ create table public.settings (
   updated_at timestamptz not null default now()
 );
 
+-- lembretes livres do usuário (ex: "comprar fita adesiva"), mostrados no painel
+create table public.reminders (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  text text not null,
+  done boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index reminders_owner_idx on public.reminders(owner_id);
+
 -- ----------------------------------------------------------------------------
 -- 5. MATERIAIS (estoque)
 -- ----------------------------------------------------------------------------
@@ -246,6 +256,7 @@ alter table public.niches enable row level security;
 alter table public.subscription_plans enable row level security;
 alter table public.profiles enable row level security;
 alter table public.settings enable row level security;
+alter table public.reminders enable row level security;
 alter table public.categories enable row level security;
 alter table public.materials enable row level security;
 alter table public.material_price_history enable row level security;
@@ -271,6 +282,10 @@ create policy "profiles_admin_insert" on public.profiles for insert with check (
 -- settings: cada usuário só vê/edita o próprio, inclusive admin — o painel
 -- Admin gerencia perfis/planos/nichos, não os dados de negócio de outros.
 create policy "settings_owner" on public.settings for all
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+create policy "reminders_owner" on public.reminders for all
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
 

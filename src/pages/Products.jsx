@@ -312,14 +312,21 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
       </div>
 
       <Card theme={theme} style={{ padding: 14, background: theme.surfaceAlt, border: "none", marginTop: 4 }}>
-        <Row theme={theme} label="Custo de materiais / componentes" value={brl(calc.materialsCost)} />
-        <Row theme={theme} label="Mão de obra" value={brl(calc.laborCost)} />
-        <Row theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)} />
-        <Row theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)} />
+        <Row theme={theme} label="Custo de materiais / componentes" value={brl(calc.materialsCost)}
+          hint="Soma de cada material da ficha técnica: preço × quantidade usada, já com a % de perda de cada material." />
+        <Row theme={theme} label="Mão de obra" value={brl(calc.laborCost)}
+          hint="Tempo de produção (min) ÷ 60 × custo da hora de mão de obra (Configurações)." />
+        <Row theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)}
+          hint="% de manutenção (Configurações) sobre (materiais + mão de obra) — cobre desgaste, energia, insumos difíceis de detalhar item a item." />
+        <Row theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)}
+          hint="Despesas fixas mensais ÷ produção mensal estimada (Configurações) — a fatia desse produto nas contas fixas do mês." />
         <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
-        <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold />
-        <Row theme={theme} label="Preço sugerido" value={brl(calc.finalPrice)} bold tone={theme.primary} />
-        <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={theme.good} />
+        <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold
+          hint="Materiais + mão de obra + manutenção + rateio de despesas fixas." />
+        <Row theme={theme} label="Preço sugerido" value={brl(calc.finalPrice)} bold tone={theme.primary}
+          hint="Custo total + margem (%) + taxa de cartão, arredondado pra terminar em ',90' se a opção estiver ligada em Configurações." />
+        <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={theme.good}
+          hint="Preço final − custo total. O % pode ficar acima da margem configurada por causa da taxa de cartão e do arredondamento." />
       </Card>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
