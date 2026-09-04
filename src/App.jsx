@@ -32,7 +32,13 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [autoOpenTab, setAutoOpenTab] = useState(null);
   const loadedForUserId = useRef(null);
+
+  const navigateTo = (tabId, openNew) => {
+    setTab(tabId);
+    if (openNew) setAutoOpenTab(tabId);
+  };
 
   const showToast = (msg, kind = "ok") => { setToast({ msg, kind }); setTimeout(() => setToast(null), 2600); };
 
@@ -173,9 +179,19 @@ export default function App() {
         </div>
 
         <div className="app-content" style={{ padding: "32px 44px 60px", display: "flex", flexDirection: "column", gap: 22 }}>
-          {tab === "dashboard" && <Dashboard theme={theme} ownerId={ownerId} showToast={showToast} />}
-          {tab === "materiais" && <Materials theme={theme} ownerId={ownerId} showToast={showToast} maxMaterials={plan?.max_materials} />}
-          {tab === "produtos" && <Products theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
+          {tab === "dashboard" && <Dashboard theme={theme} ownerId={ownerId} ownerName={profile.full_name} showToast={showToast} onQuickNavigate={navigateTo} />}
+          {tab === "materiais" && (
+            <Materials
+              theme={theme} ownerId={ownerId} showToast={showToast} maxMaterials={plan?.max_materials}
+              autoOpenNew={autoOpenTab === "materiais"} onConsumeAutoOpen={() => setAutoOpenTab(null)}
+            />
+          )}
+          {tab === "produtos" && (
+            <Products
+              theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products}
+              autoOpenNew={autoOpenTab === "produtos"} onConsumeAutoOpen={() => setAutoOpenTab(null)}
+            />
+          )}
           {tab === "kits" && <Kits theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
           {tab === "orcamentos" && <Quotes theme={theme} showToast={showToast} ownerName={profile.full_name} logoUrl={profile.logo_url} />}
           {tab === "relatorios" && <Reports theme={theme} />}

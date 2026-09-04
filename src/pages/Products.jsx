@@ -17,12 +17,16 @@ const SORT_OPTIONS = [
   { value: "produced_count", label: "Produzidos" },
 ];
 
-export default function Products({ theme, ownerId, nicheId, showToast, maxProducts }) {
+export default function Products({ theme, ownerId, nicheId, showToast, maxProducts, autoOpenNew, onConsumeAutoOpen }) {
   const { materials, products, settings, loading, refreshing, reload } = useCatalogData();
   const [modal, setModal] = useState(null);
   const [produceModal, setProduceModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showLimitInfo, setShowLimitInfo] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenNew) { setModal({}); onConsumeAutoOpen?.(); }
+  }, [autoOpenNew]);
   const atLimit = maxProducts != null && products.length >= maxProducts;
   const simpleProducts = useMemo(() => products.filter((p) => !p.is_kit), [products]);
   const [q, setQ] = useState("");

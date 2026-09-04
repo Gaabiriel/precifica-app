@@ -9,7 +9,7 @@ import { fetchMaterials, fetchCategories, saveMaterial, deleteMaterial } from ".
 const PAGE_SIZE = 10;
 const MAX_IMAGES = 5;
 
-export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
+export default function Materials({ theme, ownerId, showToast, maxMaterials, autoOpenNew, onConsumeAutoOpen }) {
   const [materials, setMaterials] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +36,10 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials }) {
     setRefreshing(false);
   }, []);
   useEffect(() => { reload(); }, [reload]);
+
+  useEffect(() => {
+    if (autoOpenNew) { setModal({}); onConsumeAutoOpen?.(); }
+  }, [autoOpenNew]);
 
   const categoryMap = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c.name])), [categories]);
 
