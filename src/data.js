@@ -172,3 +172,7 @@ export async function saveSettingsRow(ownerId, s) {
 export async function updateProfileLogo(ownerId, logoUrl) {
   return supabase.from("profiles").update({ logo_url: logoUrl }).eq("id", ownerId);
 }
+
+export async function updateDashboardWidgets(ownerId, widgetIds) {
+  return supabase.from("settings").update({ dashboard_widgets: widgetIds }).eq("owner_id", ownerId);
+}

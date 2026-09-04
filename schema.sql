@@ -59,6 +59,7 @@ create table public.settings (
   default_margin_percent numeric not null default 100,
   round_to_90 boolean not null default true,
   initial_investment numeric not null default 0,  -- equipamentos, softwares, estoque inicial etc.; usado no acompanhamento de retorno em Relatórios
+  dashboard_widgets jsonb,  -- array de ids de widget, na ordem escolhida pelo usuário; null = padrão
   updated_at timestamptz not null default now()
 );
 

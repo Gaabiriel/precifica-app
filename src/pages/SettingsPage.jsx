@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Save, Info, Upload, X, Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { Save, Upload, X, Plus, Pencil, Trash2, Tag } from "lucide-react";
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, Spinner } from "../components/ui.jsx";
 import { fetchSettings, saveSettingsRow, updateProfileLogo, fetchCategories, saveCategory, deleteCategory } from "../data.js";
 import { supabase } from "../supabaseClient";
@@ -110,12 +110,9 @@ export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoU
         </div>
       </Card>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 14, marginBottom: 20, padding: 14, background: theme.primarySoft, borderRadius: 12, fontSize: 12.5, color: theme.text }}>
-        <Info size={26} style={{ flexShrink: 0, color: theme.primary }} />
-        <span>Cada usuário tem sua própria configuração — os parâmetros da sua mãe não afetam os da sua cunhada, mesmo usando o mesmo sistema.</span>
+      <div style={{ marginTop: 20 }}>
+        <CategoriesCard theme={theme} nicheId={nicheId} showToast={showToast} />
       </div>
-
-      <CategoriesCard theme={theme} nicheId={nicheId} showToast={showToast} />
     </div>
   );
 }

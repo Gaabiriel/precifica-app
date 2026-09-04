@@ -173,7 +173,7 @@ export default function App() {
         </div>
 
         <div className="app-content" style={{ padding: "32px 44px 60px", display: "flex", flexDirection: "column", gap: 22 }}>
-          {tab === "dashboard" && <Dashboard theme={theme} />}
+          {tab === "dashboard" && <Dashboard theme={theme} ownerId={ownerId} showToast={showToast} />}
           {tab === "materiais" && <Materials theme={theme} ownerId={ownerId} showToast={showToast} maxMaterials={plan?.max_materials} />}
           {tab === "produtos" && <Products theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
           {tab === "kits" && <Kits theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
