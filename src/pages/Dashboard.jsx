@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ShoppingBag, Boxes, Percent, AlertTriangle, Wallet, DollarSign, Plus, X, ChevronLeft, ChevronRight,
-  Factory, Award, PiggyBank, Trash2, Check, ListChecks,
+  Factory, Award, PiggyBank, Trash2, Check, ListChecks, Package,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard, Button, Modal, inputStyle } from "../components/ui.jsx";
-import { brl, computeProductCost, productionLogValue } from "../pricing.js";
+import { brl, computeProductCost } from "../pricing.js";
 import {
-  fetchMaterials, fetchProductsFull, fetchSettings, fetchProductionLogSince,
-  fetchQuotes, fetchAllTimeProfit, updateDashboardWidgets, produceProduct,
+  fetchMaterials, fetchProductsFull, fetchSettings, fetchProductionLogSince, fetchSalesSince, fetchAllSales,
+  fetchQuotes, updateDashboardWidgets, produceProduct,
   fetchReminders, addReminder, toggleReminder, deleteReminder,
 } from "../data.js";
 
@@ -48,6 +48,7 @@ const WIDGET_DEFS = {
   produtos: statDef("Produtos cadastrados", (ctx) => ({ icon: ShoppingBag, label: "Produtos cadastrados", value: ctx.products.length })),
   materiais: statDef("Materiais em estoque", (ctx) => ({ icon: Boxes, label: "Materiais em estoque", value: ctx.materials.length })),
   valor_estoque: statDef("Valor em estoque", (ctx) => ({ icon: DollarSign, label: "Valor em estoque", value: brl(ctx.stockValue) })),
+  valor_estoque_produtos: statDef("Valor de produtos em estoque", (ctx) => ({ icon: Package, label: "Valor de produtos em estoque", value: brl(ctx.finishedStockValue) })),
   margem: statDef("Margem média real", (ctx) => ({ icon: Percent, label: "Margem média real", value: `${ctx.avgMargin.toFixed(0)}%`, tone: ctx.theme.good })),
   lucro_mes: statDef("Lucro do mês", (ctx) => ({ icon: Wallet, label: "Lucro do mês", value: brl(ctx.monthlyProfit), tone: ctx.theme.good })),
   alertas: statDef("Alertas de estoque baixo", (ctx) => ({ icon: AlertTriangle, label: "Alertas de estoque baixo", value: ctx.lowStock.length, tone: ctx.lowStock.length ? ctx.theme.danger : ctx.theme.good })),
@@ -83,15 +84,16 @@ const WIDGET_DEFS = {
   },
 };
 
-const DEFAULT_WIDGETS = ["produtos", "materiais", "margem", "lucro_mes", "alertas", "lembretes", "grafico_custo_venda", "materiais_acabando"];
+const DEFAULT_WIDGETS = ["produtos", "materiais", "margem", "lucro_mes", "valor_estoque_produtos", "alertas", "lembretes", "grafico_custo_venda", "materiais_acabando"];
 
 export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuickNavigate }) {
   const [materials, setMaterials] = useState([]);
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [productionLog, setProductionLog] = useState([]);
+  const [salesThisMonth, setSalesThisMonth] = useState([]);
   const [quotes, setQuotes] = useState([]);
-  const [allTimeProfit, setAllTimeProfit] = useState(0);
+  const [allSales, setAllSales] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAllLowStock, setShowAllLowStock] = useState(false);
@@ -111,16 +113,17 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
   const loadAll = useCallback(async () => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [mats, prods, st, plog, qs, allProfit, rems] = await Promise.all([
+    const [mats, prods, st, plog, sales, allSls, qs, rems] = await Promise.all([
       fetchMaterials(), fetchProductsFull(), fetchSettings(), fetchProductionLogSince(monthStart),
-      fetchQuotes(50), fetchAllTimeProfit(), fetchReminders(),
+      fetchSalesSince(monthStart), fetchAllSales(), fetchQuotes(50), fetchReminders(),
     ]);
     setMaterials(mats);
     setProducts(prods);
     setSettings(st);
     setProductionLog(plog);
+    setSalesThisMonth(sales);
+    setAllSales(allSls);
     setQuotes(qs);
-    setAllTimeProfit(allProfit);
     setReminders(rems);
     // só aplica a ordem de widgets salva na PRIMEIRA carga desta montagem —
     // recarregas depois (ex.: após registrar produção) não devem mexer no
@@ -201,14 +204,18 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
     return productCosts.reduce((s, p) => s + p.calc.realMarginPercent, 0) / productCosts.length;
   }, [productCosts]);
 
+  // Lucro do mês agora reflete só o que foi de fato VENDIDO (aba Vendas), não
+  // o que foi produzido -- produzir não é lucro até vender de verdade.
   const monthlyProfit = useMemo(() => {
     if (!settings) return 0;
     const productsById = Object.fromEntries(products.map((p) => [p.id, p]));
-    return (productionLog || []).reduce(
-      (sum, log) => sum + productionLogValue(log, productsById[log.product_id], materials, products, settings).profit * log.qty,
-      0
-    );
-  }, [productionLog, products, materials, settings]);
+    return (salesThisMonth || []).reduce((sum, s) => {
+      const product = productsById[s.product_id];
+      if (!product) return sum;
+      const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
+      return sum + (s.total_price - cost);
+    }, 0);
+  }, [salesThisMonth, products, materials, settings]);
 
   const monthlyUnits = useMemo(() => (productionLog || []).reduce((s, l) => s + l.qty, 0), [productionLog]);
 
@@ -216,17 +223,37 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
     if (!settings) return null;
     const map = new Map();
     const productsById = Object.fromEntries(products.map((p) => [p.id, p]));
-    (productionLog || []).forEach((log) => {
-      const product = productsById[log.product_id];
+    (salesThisMonth || []).forEach((s) => {
+      const product = productsById[s.product_id];
       if (!product) return;
-      const { profit } = productionLogValue(log, product, materials, products, settings);
-      const cur = map.get(log.product_id) || { name: product.name, profit: 0 };
-      cur.profit += profit * log.qty;
-      map.set(log.product_id, cur);
+      const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
+      const cur = map.get(s.product_id) || { name: product.name, profit: 0 };
+      cur.profit += s.total_price - cost;
+      map.set(s.product_id, cur);
     });
     const arr = [...map.values()].sort((a, b) => b.profit - a.profit);
     return arr[0] || null;
-  }, [productionLog, products, materials, settings]);
+  }, [salesThisMonth, products, materials, settings]);
+
+  const allTimeProfit = useMemo(() => {
+    if (!settings) return 0;
+    const productsById = Object.fromEntries(products.map((p) => [p.id, p]));
+    return (allSales || []).reduce((sum, s) => {
+      const product = productsById[s.product_id];
+      if (!product) return sum;
+      const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
+      return sum + (s.total_price - cost);
+    }, 0);
+  }, [allSales, products, materials, settings]);
+
+  const finishedStockValue = useMemo(() => {
+    if (!settings) return 0;
+    return products.reduce((sum, p) => {
+      const avail = (p.produced_count || 0) - (p.sold_count || 0);
+      if (avail <= 0) return sum;
+      return sum + avail * computeProductCost(p, materials, products, settings).finalPrice;
+    }, 0);
+  }, [products, materials, settings]);
 
   const chartData = productCosts.slice(0, 8).map((p) => ({
     name: p.product.name.length > 14 ? p.product.name.slice(0, 13) + "…" : p.product.name,
@@ -237,7 +264,7 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
   if (loading) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando painel…</div>;
 
   const ctx = {
-    theme, materials, products, settings, lowStock, stockValue, avgMargin, monthlyProfit, monthlyUnits,
+    theme, materials, products, settings, lowStock, stockValue, finishedStockValue, avgMargin, monthlyProfit, monthlyUnits,
     chartData, ownerName, ownerId, quotes, allTimeProfit, topProduct, showToast, reminders,
     onQuickNavigate, reload: loadAll,
     onShowAllLowStock: () => setShowAllLowStock(true),

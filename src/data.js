@@ -45,13 +45,10 @@ export async function fetchSales(limit = 200) {
   return data || [];
 }
 
-/** Soma o lucro de toda a produção já registrada (sem filtro de data) — usado pra acompanhar quanto do investimento inicial já voltou em vendas. */
-export async function fetchAllTimeProfit() {
-  const { data } = await supabase.from("production_log").select("qty, cost_snapshot");
-  return (data || []).reduce((sum, log) => {
-    const profit = log.cost_snapshot?.profit;
-    return sum + (typeof profit === "number" ? profit * log.qty : 0);
-  }, 0);
+/** Todas as vendas já registradas (sem filtro de data) — usado pra calcular o lucro acumulado e acompanhar quanto do investimento inicial já voltou. */
+export async function fetchAllSales() {
+  const { data } = await supabase.from("sales").select("*").eq("type", "venda");
+  return data || [];
 }
 
 export async function fetchProductionLogSince(sinceDate) {
@@ -60,6 +57,16 @@ export async function fetchProductionLogSince(sinceDate) {
     .select("*")
     .gte("produced_at", sinceDate.toISOString())
     .order("produced_at", { ascending: false });
+  return data || [];
+}
+
+export async function fetchSalesSince(sinceDate) {
+  const { data } = await supabase
+    .from("sales")
+    .select("*")
+    .eq("type", "venda")
+    .gte("sold_at", sinceDate.toISOString())
+    .order("sold_at", { ascending: false });
   return data || [];
 }
 

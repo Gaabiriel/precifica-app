@@ -10,6 +10,7 @@ const GRID_MIN_CARD = 270;
 const GRID_GAP = 16;
 const ROWS_PER_PAGE = 3;
 const SORT_OPTIONS = [
+  { value: "created_at", label: "Mais recentes" },
   { value: "name", label: "Nome" },
   { value: "subtotal", label: "Custo" },
   { value: "finalPrice", label: "Preço de venda" },
@@ -30,8 +31,8 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
   const atLimit = maxProducts != null && products.length >= maxProducts;
   const simpleProducts = useMemo(() => products.filter((p) => !p.is_kit), [products]);
   const [q, setQ] = useState("");
-  const [sortField, setSortField] = useState("name");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortField, setSortField] = useState("created_at");
+  const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
   const [columns, setColumns] = useState(4);
   const gridRef = useRef(null);
@@ -86,8 +87,8 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
     let list = productCosts.filter(({ product }) => product.name.toLowerCase().includes(q.toLowerCase()));
     const dir = sortDir === "asc" ? 1 : -1;
     list = [...list].sort((a, b) => {
-      const va = sortField === "name" ? a.product.name : sortField === "produced_count" ? (a.product.produced_count || 0) : a.calc[sortField];
-      const vb = sortField === "name" ? b.product.name : sortField === "produced_count" ? (b.product.produced_count || 0) : b.calc[sortField];
+      const va = sortField === "name" ? a.product.name : sortField === "produced_count" ? (a.product.produced_count || 0) : sortField === "created_at" ? new Date(a.product.created_at).getTime() : a.calc[sortField];
+      const vb = sortField === "name" ? b.product.name : sortField === "produced_count" ? (b.product.produced_count || 0) : sortField === "created_at" ? new Date(b.product.created_at).getTime() : b.calc[sortField];
       if (typeof va === "string") return va.localeCompare(vb) * dir;
       return ((va || 0) - (vb || 0)) * dir;
     });

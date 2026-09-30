@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Package, Wallet, Receipt, TrendingUp, PiggyBank } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard, Row } from "../components/ui.jsx";
-import { brl, monthKey, productionLogValue } from "../pricing.js";
-import { useCatalogData, fetchProductionLogSince, fetchAllTimeProfit } from "../data.js";
+import { brl, monthKey, computeProductCost } from "../pricing.js";
+import { useCatalogData, fetchSalesSince, fetchAllSales } from "../data.js";
 
 const MONTHS_WINDOW = 6;
 
@@ -14,45 +14,58 @@ function monthLabel(key) {
 
 export default function Reports({ theme }) {
   const { materials, products, settings, loading: loadingCatalog } = useCatalogData();
-  const [productionLog, setProductionLog] = useState([]);
+  const [sales, setSales] = useState([]);
   const [loadingLog, setLoadingLog] = useState(true);
-  const [allTimeProfit, setAllTimeProfit] = useState(0);
+  const [allSales, setAllSales] = useState([]);
   const [loadingAllTime, setLoadingAllTime] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
 
   useEffect(() => {
     const now = new Date();
     const since = new Date(now.getFullYear(), now.getMonth() - (MONTHS_WINDOW - 1), 1);
-    fetchProductionLogSince(since).then((rows) => {
-      setProductionLog(rows);
+    fetchSalesSince(since).then((rows) => {
+      setSales(rows);
       setLoadingLog(false);
     });
   }, []);
 
   useEffect(() => {
-    fetchAllTimeProfit().then((total) => {
-      setAllTimeProfit(total);
+    fetchAllSales().then((rows) => {
+      setAllSales(rows);
       setLoadingAllTime(false);
     });
   }, []);
 
   const productsById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
 
+  // Lucro/receita contam só o que foi de fato VENDIDO (aba Vendas) -- produzir
+  // não é lucro até vender de verdade. Custo usa o cálculo atual do produto
+  // (não guardamos um "snapshot" do custo no momento da venda).
   const enriched = useMemo(() => {
     if (!settings) return [];
-    return productionLog.map((log) => {
-      const product = productsById[log.product_id];
-      const { subtotal, finalPrice, profit } = productionLogValue(log, product, materials, products, settings);
+    return sales.map((s) => {
+      const product = productsById[s.product_id];
+      const cost = product ? computeProductCost(product, materials, products, settings).subtotal * s.qty : 0;
       return {
-        ...log,
+        ...s,
         productName: product?.name || "Produto removido",
-        month: monthKey(log.produced_at),
-        revenue: finalPrice * log.qty,
-        cost: subtotal * log.qty,
-        profit: profit * log.qty,
+        month: monthKey(s.sold_at),
+        revenue: s.total_price,
+        cost,
+        profit: s.total_price - cost,
       };
     });
-  }, [productionLog, productsById, materials, products, settings]);
+  }, [sales, productsById, materials, products, settings]);
+
+  const allTimeProfit = useMemo(() => {
+    if (!settings) return 0;
+    return allSales.reduce((sum, s) => {
+      const product = productsById[s.product_id];
+      if (!product) return sum;
+      const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
+      return sum + (s.total_price - cost);
+    }, 0);
+  }, [allSales, productsById, materials, products, settings]);
 
   const monthsSeries = useMemo(() => {
     const now = new Date();
@@ -101,14 +114,14 @@ export default function Reports({ theme }) {
 
   const investment = settings?.initial_investment || 0;
 
-  if (productionLog.length === 0) {
+  if (sales.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {investment > 0 && <InvestmentCard theme={theme} investment={investment} recovered={allTimeProfit} />}
         <Card theme={theme} style={{ padding: 40, textAlign: "center" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Nenhuma produção registrada ainda</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Nenhuma venda registrada ainda</div>
           <div style={{ fontSize: 13, color: theme.textMuted }}>
-            Assim que você registrar produção na aba Produtos, os relatórios de lucro e produtos mais vendidos aparecem aqui.
+            Assim que você registrar uma venda na aba Vendas, os relatórios de lucro e produtos mais vendidos aparecem aqui.
           </div>
         </Card>
       </div>
@@ -131,7 +144,7 @@ export default function Reports({ theme }) {
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        <StatCard theme={theme} icon={Package} label="Unidades produzidas" value={totals.units} />
+        <StatCard theme={theme} icon={Package} label="Unidades vendidas" value={totals.units} />
         <StatCard theme={theme} icon={Wallet} label="Receita do mês" value={brl(totals.revenue)} />
         <StatCard theme={theme} icon={Receipt} label="Custo do mês" value={brl(totals.cost)} />
         <StatCard theme={theme} icon={TrendingUp} label="Lucro do mês" value={brl(totals.profit)} tone={theme.good} />
@@ -156,11 +169,11 @@ export default function Reports({ theme }) {
           Produtos mais lucrativos no mês
         </div>
         {topProducts.length === 0 ? (
-          <div style={{ padding: 24, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>Nenhuma produção neste mês.</div>
+          <div style={{ padding: 24, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>Nenhuma venda neste mês.</div>
         ) : (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 1fr 1fr", padding: "8px 20px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: theme.textMuted, background: theme.surfaceAlt, borderBottom: `1px solid ${theme.border}` }}>
-              <span>Produto</span><span>Produzido</span><span>Receita</span><span>Lucro</span>
+              <span>Produto</span><span>Vendido</span><span>Receita</span><span>Lucro</span>
             </div>
             {topProducts.map((p, i) => (
               <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 1fr 1fr", padding: "11px 20px", fontSize: 13.5, alignItems: "center", borderBottom: `1px solid ${theme.border}` }}>
