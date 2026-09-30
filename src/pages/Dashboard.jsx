@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ShoppingBag, Boxes, Percent, AlertTriangle, Wallet, DollarSign, Plus, X, ChevronLeft, ChevronRight,
-  Factory, Award, PiggyBank, Trash2, Check, ListChecks, Package,
+  Factory, Award, PiggyBank, Trash2, Check, ListChecks, Package, Heart,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard, Button, Modal, inputStyle } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
+import { SERIF } from "../theme.js";
 import {
   fetchMaterials, fetchProductsFull, fetchSettings, fetchProductionLogSince, fetchSalesSince, fetchAllSales,
   fetchQuotes, updateDashboardWidgets, produceProduct,
@@ -86,7 +87,7 @@ const WIDGET_DEFS = {
 
 const DEFAULT_WIDGETS = ["produtos", "materiais", "margem", "lucro_mes", "valor_estoque_produtos", "alertas", "lembretes", "grafico_custo_venda", "materiais_acabando"];
 
-export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuickNavigate }) {
+export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToast, onQuickNavigate }) {
   const [materials, setMaterials] = useState([]);
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -227,7 +228,7 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
       const product = productsById[s.product_id];
       if (!product) return;
       const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
-      const cur = map.get(s.product_id) || { name: product.name, profit: 0 };
+      const cur = map.get(s.product_id) || { name: product.name, image: product.image_urls?.[0] || null, profit: 0 };
       cur.profit += s.total_price - cost;
       map.set(s.product_id, cur);
     });
@@ -276,7 +277,7 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
     <div>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 14 }}>
         <div style={SIZE_STYLE.wide}>
-          <WelcomeWidget theme={theme} ownerName={ownerName} />
+          <WelcomeWidget theme={theme} ownerName={ownerName} logoUrl={logoUrl} />
         </div>
         <div style={SIZE_STYLE.medium}>
           <CalendarWidget theme={theme} />
@@ -355,15 +356,39 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
   );
 }
 
-function WelcomeWidget({ theme, ownerName }) {
+function WelcomeWidget({ theme, ownerName, logoUrl }) {
   const firstName = (ownerName || "").trim().split(/\s+/)[0];
   const dateStr = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   return (
-    <Card theme={theme} style={{ padding: "22px 24px" }}>
-      <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 4 }}>
-        {firstName ? `Olá, ${firstName}!` : "Olá!"}
+    <Card theme={theme} style={{ padding: "20px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, overflow: "hidden", position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+        {logoUrl ? (
+          <img src={logoUrl} alt="" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: `1px solid ${theme.border}`, flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: 56, height: 56, borderRadius: "50%", background: theme.primarySoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Heart size={22} color={theme.primary} />
+          </div>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, marginBottom: 3 }}>
+            {firstName ? `Olá, ${firstName}!` : "Olá!"}
+          </div>
+          <div style={{ fontSize: 13, color: theme.textMuted, textTransform: "capitalize" }}>{dateStr}</div>
+        </div>
       </div>
-      <div style={{ fontSize: 13, color: theme.textMuted, textTransform: "capitalize" }}>{dateStr}</div>
+
+      <div className="welcome-tagline" style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+        <svg width="120" height="72" viewBox="0 0 120 72" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
+          <path d="M4 58C24 18 44 78 64 38C80 6 96 46 116 14" stroke={theme.primarySoft} strokeWidth="10" strokeLinecap="round" />
+          <path d="M4 40C24 6 44 60 64 24C80 -4 96 30 116 2" stroke={theme.border} strokeWidth="6" strokeLinecap="round" />
+        </svg>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontFamily: SERIF, fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: theme.primary, lineHeight: 1.5 }}>
+            Feito com carinho<br />e dedicação
+          </div>
+          <Heart size={13} color={theme.primary} style={{ marginTop: 4 }} fill={theme.primary} />
+        </div>
+      </div>
     </Card>
   );
 }
@@ -387,7 +412,7 @@ function CalendarWidget({ theme }) {
     <Card theme={theme} style={{ padding: 18 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <button style={navBtn} onClick={() => setCursor(new Date(year, month - 1, 1))}><ChevronLeft size={14} /></button>
-        <div style={{ fontSize: 13.5, fontWeight: 700, textTransform: "capitalize" }}>{monthLabel}</div>
+        <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, textTransform: "capitalize" }}>{monthLabel}</div>
         <button style={navBtn} onClick={() => setCursor(new Date(year, month + 1, 1))}><ChevronRight size={14} /></button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 10.5, color: theme.textMuted, textAlign: "center", marginBottom: 4 }}>
@@ -433,7 +458,7 @@ function QuickActionsWidget({ theme, products, materials, settings, ownerId, onN
 
   return (
     <Card theme={theme} style={{ padding: 20 }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Ações rápidas</div>
+      <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Ações rápidas</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
         <Button theme={theme} variant="soft" onClick={() => onNavigate("materiais", true)}><Plus size={13} /> Novo material</Button>
         <Button theme={theme} variant="soft" onClick={() => onNavigate("produtos", true)}><Plus size={13} /> Novo produto</Button>
@@ -459,19 +484,28 @@ function QuickActionsWidget({ theme, products, materials, settings, ownerId, onN
 
 function TopProductWidget({ theme, topProduct }) {
   return (
-    <Card theme={theme} style={{ padding: "22px 20px", flex: "1 1 200px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, color: theme.textMuted }}>
-        <Award size={15} />
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Mais lucrativo do mês</span>
-      </div>
-      {topProduct ? (
-        <>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>{topProduct.name}</div>
-          <div style={{ fontSize: 13, color: theme.good, fontWeight: 700 }}>{brl(topProduct.profit)} de lucro</div>
-        </>
+    <Card theme={theme} style={{ padding: 18, flex: "1 1 200px", display: "flex", alignItems: "center", gap: 12 }}>
+      {topProduct?.image ? (
+        <img src={topProduct.image} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${theme.border}` }} />
       ) : (
-        <div style={{ fontSize: 13, color: theme.textMuted }}>Nenhuma produção este mês ainda.</div>
+        <div style={{ width: 52, height: 52, borderRadius: 10, background: theme.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Award size={20} color={theme.textMuted} />
+        </div>
       )}
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, color: theme.textMuted }}>
+          <Award size={12} />
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Mais lucrativo do mês</span>
+        </div>
+        {topProduct ? (
+          <>
+            <div style={{ fontFamily: SERIF, fontSize: 15.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{topProduct.name}</div>
+            <div style={{ fontSize: 12.5, color: theme.good, fontWeight: 700 }}>{brl(topProduct.profit)} de lucro</div>
+          </>
+        ) : (
+          <div style={{ fontSize: 12.5, color: theme.textMuted }}>Nenhuma venda este mês ainda.</div>
+        )}
+      </div>
     </Card>
   );
 }
@@ -482,7 +516,7 @@ function InvestmentWidget({ theme, investment, recovered }) {
       <Card theme={theme} style={{ padding: 18 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <PiggyBank size={15} color={theme.primary} />
-          <div style={{ fontSize: 14, fontWeight: 700 }}>Recuperação do investimento</div>
+          <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700 }}>Recuperação do investimento</div>
         </div>
         <div style={{ fontSize: 12.5, color: theme.textMuted }}>Configure o "Investimento inicial" em Configurações pra acompanhar aqui.</div>
       </Card>
@@ -493,7 +527,7 @@ function InvestmentWidget({ theme, investment, recovered }) {
     <Card theme={theme} style={{ padding: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <PiggyBank size={15} color={theme.primary} />
-        <div style={{ fontSize: 14, fontWeight: 700 }}>Recuperação do investimento</div>
+        <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700 }}>Recuperação do investimento</div>
       </div>
       <div style={{ height: 8, borderRadius: 5, background: theme.surfaceAlt, overflow: "hidden", marginBottom: 10 }}>
         <div style={{ height: "100%", width: `${pct}%`, background: theme.good }} />
@@ -507,7 +541,7 @@ function ProductionGoalWidget({ theme, produced, capacity }) {
   const pct = capacity > 0 ? Math.min((produced / capacity) * 100, 100) : 0;
   return (
     <Card theme={theme} style={{ padding: 18 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Meta de produção do mês</div>
+      <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Meta de produção do mês</div>
       <div style={{ height: 8, borderRadius: 5, background: theme.surfaceAlt, overflow: "hidden", marginBottom: 10 }}>
         <div style={{ height: "100%", width: `${pct}%`, background: theme.primary }} />
       </div>
@@ -519,7 +553,7 @@ function ProductionGoalWidget({ theme, produced, capacity }) {
 function ChartWidget({ theme, chartData }) {
   return (
     <Card theme={theme} style={{ padding: 18, height: "100%" }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>
+      <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
         Custo × Preço de venda por produto
       </div>
       {chartData.length ? (
@@ -544,7 +578,7 @@ function LowStockWidget({ theme, lowStock, onShowAll, onAddReminder }) {
   return (
     <Card theme={theme} style={{ padding: 18, height: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>Materiais acabando</div>
+        <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700 }}>Materiais acabando</div>
         {lowStock.length > LOW_STOCK_PREVIEW && (
           <Button theme={theme} variant="soft" style={{ padding: "5px 10px", fontSize: 11.5 }} onClick={onShowAll}>
             Ver todos ({lowStock.length})
@@ -586,7 +620,7 @@ function RemindersWidget({ theme, reminders, onAdd, onToggle, onDelete }) {
     <Card theme={theme} style={{ padding: 18, height: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <ListChecks size={15} color={theme.primary} />
-        <div style={{ fontSize: 15, fontWeight: 700 }}>Lembretes</div>
+        <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700 }}>Lembretes</div>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         <input
@@ -634,7 +668,7 @@ function LatestQuotesWidget({ theme, quotes, onNavigate }) {
   const latest = quotes.slice(0, 5);
   return (
     <Card theme={theme} style={{ padding: 18, height: "100%" }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Últimos orçamentos</div>
+      <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Últimos orçamentos</div>
       {latest.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted }}>Nenhum orçamento salvo ainda.</div>}
       {latest.map((q) => (
         <button
@@ -663,7 +697,7 @@ function UpcomingQuotesWidget({ theme, quotes, onNavigate }) {
 
   return (
     <Card theme={theme} style={{ padding: 18, height: "100%" }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Orçamentos vencendo</div>
+      <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Orçamentos vencendo</div>
       {upcoming.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted }}>Nenhum orçamento vencendo nos próximos 7 dias.</div>}
       {upcoming.map((q) => (
         <button

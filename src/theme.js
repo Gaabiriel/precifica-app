@@ -1,3 +1,8 @@
+// fonte serifada usada em títulos/marca (nome do ateliê, saudação, cabeçalhos
+// de widget) pra dar um ar mais boutique; texto de dado/número continua em
+// Manrope (sans) pra manter a leitura de números limpa.
+export const SERIF = "'Playfair Display', Georgia, serif";
+
 export const FALLBACK_THEME = {
   bg: "#F4F5F5", surface: "#FFFFFF", surfaceAlt: "#E7EBEA", border: "#DCE1DF",
   primary: "#3F5E58", primarySoft: "#DCE6E2", accent: "#5B7F76",

@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   LayoutDashboard, Boxes, ShoppingBag, Settings2, Tag,
-  ShieldCheck, FileText, LogOut, CheckCircle2, AlertTriangle, Menu, TrendingUp, Layers, ShoppingCart,
+  ShieldCheck, FileText, LogOut, CheckCircle2, AlertTriangle, Menu, TrendingUp, Layers, ShoppingCart, Bell, UserCircle,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
-import { FALLBACK_THEME } from "./theme";
+import { FALLBACK_THEME, SERIF } from "./theme";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Materials from "./pages/Materials.jsx";
@@ -116,17 +116,17 @@ export default function App() {
 
       {/* sidebar */}
       <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ width: 236, flexShrink: 0, background: theme.surface, borderRight: `1px solid ${theme.border}`, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "22px 20px 20px" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "26px 16px 22px", textAlign: "center" }}>
           {profile.logo_url ? (
-            <img src={profile.logo_url} alt="" style={{ maxWidth: 160, maxHeight: 44, objectFit: "contain" }} />
+            <img src={profile.logo_url} alt="" style={{ width: 76, height: 76, borderRadius: "50%", objectFit: "cover", border: `1px solid ${theme.border}` }} />
           ) : (
-            <>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Tag size={16} color="#fff" />
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.3px" }}>Precifica</div>
-            </>
+            <div style={{ width: 76, height: 76, borderRadius: "50%", background: theme.primary, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Tag size={26} color="#fff" />
+            </div>
           )}
+          <div style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, lineHeight: 1.4 }}>
+            {profile.full_name || "Precifica"}
+          </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "8px 12px" }}>
@@ -172,16 +172,32 @@ export default function App() {
           <button className="app-menu-btn" onClick={() => setMobileNavOpen(true)} style={{ background: "none", border: `1px solid ${theme.border}`, borderRadius: 8, width: 36, height: 36, alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text, flexShrink: 0 }}>
             <Menu size={17} />
           </button>
-          <div>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase", color: theme.textMuted, marginBottom: 6 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: SERIF, fontSize: 11, fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: theme.textMuted, marginBottom: 6 }}>
               {niche?.name || "Sem nicho"}
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.4px" }}>{activeTab?.label}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, letterSpacing: "-0.2px" }}>{activeTab?.label}</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <button
+              onClick={() => navigateTo("dashboard")}
+              title="Notificações"
+              style={{ background: "none", border: `1px solid ${theme.border}`, borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}
+            >
+              <Bell size={16} />
+            </button>
+            <button
+              onClick={() => navigateTo("config")}
+              title="Minha conta"
+              style={{ background: "none", border: `1px solid ${theme.border}`, borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}
+            >
+              <UserCircle size={18} />
+            </button>
           </div>
         </div>
 
         <div className="app-content" style={{ padding: "32px 44px 60px", display: "flex", flexDirection: "column", gap: 22 }}>
-          {tab === "dashboard" && <Dashboard theme={theme} ownerId={ownerId} ownerName={profile.full_name} showToast={showToast} onQuickNavigate={navigateTo} />}
+          {tab === "dashboard" && <Dashboard theme={theme} ownerId={ownerId} ownerName={profile.full_name} logoUrl={profile.logo_url} showToast={showToast} onQuickNavigate={navigateTo} />}
           {tab === "materiais" && (
             <Materials
               theme={theme} ownerId={ownerId} showToast={showToast} maxMaterials={plan?.max_materials}
