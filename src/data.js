@@ -40,6 +40,11 @@ export async function fetchQuotes(limit = 10) {
   return data || [];
 }
 
+export async function fetchSales(limit = 200) {
+  const { data } = await supabase.from("sales").select("*").order("sold_at", { ascending: false }).limit(limit);
+  return data || [];
+}
+
 /** Soma o lucro de toda a produção já registrada (sem filtro de data) — usado pra acompanhar quanto do investimento inicial já voltou em vendas. */
 export async function fetchAllTimeProfit() {
   const { data } = await supabase.from("production_log").select("qty, cost_snapshot");
@@ -164,6 +169,25 @@ export async function produceProduct({ ownerId, product, qty, materials, product
     qty,
     cost_snapshot: { subtotal: calc.subtotal, finalPrice: calc.finalPrice, profit: calc.profit },
   });
+  return { error: null };
+}
+
+export async function registerSale({ ownerId, product, qty, totalPrice, notes }) {
+  const available = (product.produced_count || 0) - (product.sold_count || 0);
+  if (qty > available) return { error: { message: `Só tem ${available} unidade(s) pronta(s) para vender.` } };
+
+  const { error } = await supabase.from("sales").insert({ owner_id: ownerId, product_id: product.id, qty, total_price: totalPrice, notes: notes || null });
+  if (error) return { error };
+  await supabase.from("products").update({ sold_count: (product.sold_count || 0) + qty }).eq("id", product.id);
+  return { error: null };
+}
+
+export async function deleteSale(sale, product) {
+  const { error } = await supabase.from("sales").delete().eq("id", sale.id);
+  if (error) return { error };
+  if (product) {
+    await supabase.from("products").update({ sold_count: Math.max(0, (product.sold_count || 0) - sale.qty) }).eq("id", product.id);
+  }
   return { error: null };
 }
 

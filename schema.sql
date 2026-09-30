@@ -136,6 +136,7 @@ create table public.products (
   is_kit boolean not null default false,
   has_stock_control boolean not null default true,  -- se false, "Produzir" não verifica/desconta estoque (produtos antigos)
   produced_count numeric not null default 0,
+  sold_count numeric not null default 0,  -- produced_count - sold_count = pronto, ainda não vendido
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -182,6 +183,20 @@ create table public.quotes (
   valid_until date,
   created_at timestamptz not null default now()
 );
+
+-- vendas: "produced_count - sold_count" (ambos em products) = pronto e ainda
+-- não vendido. Registrar uma venda soma em sold_count e grava o histórico aqui.
+create table public.sales (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete restrict,
+  qty numeric not null,
+  total_price numeric not null default 0,
+  notes text,
+  sold_at timestamptz not null default now()
+);
+create index sales_owner_idx on public.sales(owner_id);
+create index sales_product_idx on public.sales(product_id);
 
 -- ============================================================================
 -- FUNÇÕES / TRIGGERS
@@ -266,6 +281,7 @@ alter table public.product_materials enable row level security;
 alter table public.product_kit_items enable row level security;
 alter table public.production_log enable row level security;
 alter table public.quotes enable row level security;
+alter table public.sales enable row level security;
 
 -- niches: leitura pública (a tela de cadastro, antes do login, precisa listar
 -- os nichos disponíveis); plans: só autenticado lê. Escrita só admin em ambas.
@@ -324,6 +340,10 @@ create policy "production_owner" on public.production_log for all
   with check (owner_id = auth.uid());
 
 create policy "quotes_owner" on public.quotes for all
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+create policy "sales_owner" on public.sales for all
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
 

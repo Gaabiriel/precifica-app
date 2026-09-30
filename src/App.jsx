@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   LayoutDashboard, Boxes, ShoppingBag, Settings2, Tag,
-  ShieldCheck, FileText, LogOut, CheckCircle2, AlertTriangle, Menu, TrendingUp, Layers,
+  ShieldCheck, FileText, LogOut, CheckCircle2, AlertTriangle, Menu, TrendingUp, Layers, ShoppingCart,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { FALLBACK_THEME } from "./theme";
@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Materials from "./pages/Materials.jsx";
 import Products from "./pages/Products.jsx";
 import Kits from "./pages/Kits.jsx";
+import Sales from "./pages/Sales.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import Admin from "./pages/Admin.jsx";
 import Quotes from "./pages/Quotes.jsx";
@@ -102,6 +103,7 @@ export default function App() {
     { id: "materiais", label: "Materiais & Estoque", icon: Boxes },
     { id: "produtos", label: "Produtos", icon: ShoppingBag },
     { id: "kits", label: "Kits", icon: Layers },
+    { id: "vendas", label: "Vendas", icon: ShoppingCart },
     { id: "orcamentos", label: "Orçamentos", icon: FileText },
     { id: "relatorios", label: "Relatórios", icon: TrendingUp },
     { id: "config", label: "Configurações", icon: Settings2 },
@@ -193,6 +195,7 @@ export default function App() {
             />
           )}
           {tab === "kits" && <Kits theme={theme} ownerId={ownerId} nicheId={nicheId} showToast={showToast} maxProducts={plan?.max_products} />}
+          {tab === "vendas" && <Sales theme={theme} ownerId={ownerId} showToast={showToast} />}
           {tab === "orcamentos" && <Quotes theme={theme} showToast={showToast} ownerName={profile.full_name} logoUrl={profile.logo_url} />}
           {tab === "relatorios" && <Reports theme={theme} />}
           {tab === "config" && (
