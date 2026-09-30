@@ -12,6 +12,7 @@ create table if not exists public.sales (
   product_id uuid not null references public.products(id) on delete restrict,
   qty numeric not null,
   total_price numeric not null default 0,
+  type text not null default 'venda',  -- 'venda' | 'remocao'
   notes text,
   sold_at timestamptz not null default now()
 );

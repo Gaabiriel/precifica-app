@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Factory } from "lucide-react";
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, saveProduct, deleteProduct } from "../data.js";
+import { useCatalogData, saveProduct, deleteProduct, produceProduct } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -21,6 +21,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
   const kits = useMemo(() => products.filter((p) => p.is_kit), [products]);
 
   const [modal, setModal] = useState(null);
+  const [produceModal, setProduceModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showLimitInfo, setShowLimitInfo] = useState(false);
   const atLimit = maxProducts != null && products.length >= maxProducts;
@@ -62,6 +63,13 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
       return;
     }
     showToast("Kit removido.");
+    reload();
+  };
+  const handleProduce = async (kit, qty) => {
+    const { error } = await produceProduct({ ownerId, product: kit, qty, materials, products, settings });
+    setProduceModal(null);
+    if (error) { showToast(error.message, "err"); return; }
+    showToast(`Produção registrada: ${qty}x ${kit.name}.`);
     reload();
   };
 
@@ -132,7 +140,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
             <div style={{ padding: "4px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>{product.name}</div>
               <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
-                {(product.kitItems || []).length} {(product.kitItems || []).length === 1 ? "produto" : "produtos"} no kit
+                {(product.kitItems || []).length} {(product.kitItems || []).length === 1 ? "produto" : "produtos"} no kit · Produzido: {product.produced_count || 0} un.
               </div>
               {product.dimensions && (
                 <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: theme.textMuted, marginBottom: 10, marginTop: -6 }}>
@@ -143,9 +151,10 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
               <Row theme={theme} label="Preço de venda" value={brl(calc.finalPrice)} bold />
               <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={theme.good} />
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto", paddingTop: 12 }}>
-                <Button theme={theme} variant="ghost" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setModal(product)}>
-                  <Pencil size={13} /> Editar
+                <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setProduceModal(product)}>
+                  <Factory size={13} /> Produzir
                 </Button>
+                <button onClick={() => setModal(product)} style={iconBtn(theme)}><Pencil size={14} /></button>
                 <button onClick={() => setDeleteTarget(product)} style={iconBtn(theme)}><Trash2 size={14} /></button>
               </div>
             </div>
@@ -168,6 +177,9 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
       {modal && (
         <KitModal theme={theme} kit={modal} materials={materials} products={products} settings={settings}
           onClose={() => setModal(null)} onSave={handleSave} />
+      )}
+      {produceModal && (
+        <ProduceModal theme={theme} product={produceModal} onClose={() => setProduceModal(null)} onConfirm={handleProduce} />
       )}
       {deleteTarget && (
         <ConfirmModal
@@ -349,6 +361,21 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
       </div>
 
       {detailMaterial && <MaterialDetailModal theme={theme} material={detailMaterial} onClose={() => setDetailMaterial(null)} />}
+    </Modal>
+  );
+}
+
+function ProduceModal({ theme, product, onClose, onConfirm }) {
+  const [qty, setQty] = useState(1);
+  return (
+    <Modal theme={theme} title={`Registrar produção — ${product.name}`} onClose={onClose} width={360}>
+      <Field label="Quantidade produzida" hint={product.has_stock_control ? "O estoque dos materiais extras do kit será descontado automaticamente" : "Este kit não controla estoque — nada será descontado"}>
+        <input type="number" min={1} style={inputStyle(theme)} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} />
+      </Field>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+        <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button theme={theme} onClick={() => onConfirm(product, qty)}><Factory size={14} /> Confirmar</Button>
+      </div>
     </Modal>
   );
 }

@@ -185,13 +185,15 @@ create table public.quotes (
 );
 
 -- vendas: "produced_count - sold_count" (ambos em products) = pronto e ainda
--- não vendido. Registrar uma venda soma em sold_count e grava o histórico aqui.
+-- não vendido. Registrar uma venda ou uma remoção manual (defeito, perda,
+-- brinde) soma em sold_count e grava o histórico aqui; type distingue as duas.
 create table public.sales (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
   product_id uuid not null references public.products(id) on delete restrict,
   qty numeric not null,
   total_price numeric not null default 0,
+  type text not null default 'venda',  -- 'venda' | 'remocao'
   notes text,
   sold_at timestamptz not null default now()
 );

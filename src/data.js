@@ -172,14 +172,22 @@ export async function produceProduct({ ownerId, product, qty, materials, product
   return { error: null };
 }
 
-export async function registerSale({ ownerId, product, qty, totalPrice, notes }) {
+async function registerStockExit({ ownerId, product, qty, totalPrice, notes, type }) {
   const available = (product.produced_count || 0) - (product.sold_count || 0);
-  if (qty > available) return { error: { message: `Só tem ${available} unidade(s) pronta(s) para vender.` } };
+  if (qty > available) return { error: { message: `Só tem ${available} unidade(s) pronta(s) em estoque.` } };
 
-  const { error } = await supabase.from("sales").insert({ owner_id: ownerId, product_id: product.id, qty, total_price: totalPrice, notes: notes || null });
+  const { error } = await supabase.from("sales").insert({ owner_id: ownerId, product_id: product.id, qty, total_price: totalPrice, type, notes: notes || null });
   if (error) return { error };
   await supabase.from("products").update({ sold_count: (product.sold_count || 0) + qty }).eq("id", product.id);
   return { error: null };
+}
+
+export async function registerSale({ ownerId, product, qty, totalPrice, notes }) {
+  return registerStockExit({ ownerId, product, qty, totalPrice, notes, type: "venda" });
+}
+
+export async function removeFromStock({ ownerId, product, qty, notes }) {
+  return registerStockExit({ ownerId, product, qty, totalPrice: 0, notes, type: "remocao" });
 }
 
 export async function deleteSale(sale, product) {
