@@ -142,17 +142,19 @@ export async function deleteProduct(id) {
 }
 
 export async function produceProduct({ ownerId, product, qty, materials, products, settings }) {
-  const missing = [];
-  (product.bom || []).forEach((b) => {
-    const mat = materials.find((m) => m.id === b.material_id);
-    if (mat && mat.stock < b.qty * qty) missing.push(mat.name);
-  });
-  if (missing.length) return { error: { message: `Estoque insuficiente: ${missing.join(", ")}` } };
+  if (product.has_stock_control) {
+    const missing = [];
+    (product.bom || []).forEach((b) => {
+      const mat = materials.find((m) => m.id === b.material_id);
+      if (mat && mat.stock < b.qty * qty) missing.push(mat.name);
+    });
+    if (missing.length) return { error: { message: `Estoque insuficiente: ${missing.join(", ")}` } };
 
-  for (const b of product.bom || []) {
-    const mat = materials.find((m) => m.id === b.material_id);
-    if (!mat) continue;
-    await supabase.from("materials").update({ stock: Math.round((mat.stock - b.qty * qty) * 1000) / 1000 }).eq("id", mat.id);
+    for (const b of product.bom || []) {
+      const mat = materials.find((m) => m.id === b.material_id);
+      if (!mat) continue;
+      await supabase.from("materials").update({ stock: Math.round((mat.stock - b.qty * qty) * 1000) / 1000 }).eq("id", mat.id);
+    }
   }
   await supabase.from("products").update({ produced_count: (product.produced_count || 0) + qty }).eq("id", product.id);
   const calc = computeProductCost(product, materials, products, settings);

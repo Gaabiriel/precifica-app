@@ -137,7 +137,14 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
               <Carousel theme={theme} images={product.image_urls} height={140} />
             </div>
             <div style={{ padding: "4px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>{product.name}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>{product.name}</div>
+                {product.has_stock_control === false && (
+                  <span title="Este produto não controla estoque de materiais" style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5, background: theme.surfaceAlt, color: theme.textMuted }}>
+                    SEM ESTOQUE
+                  </span>
+                )}
+              </div>
               <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>Produzido: {product.produced_count || 0} un.</div>
               {product.dimensions && (
                 <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: theme.textMuted, marginBottom: 10, marginTop: -6 }}>
@@ -204,7 +211,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
 
 function ProductModal({ theme, product, materials, products, settings, onClose, onSave }) {
   const [form, setForm] = useState({
-    name: "", image_urls: [], labor_minutes: 30, notes: "", dimensions: "", is_kit: false,
+    name: "", image_urls: [], labor_minutes: 30, notes: "", dimensions: "", is_kit: false, has_stock_control: true,
     bom: [], kitItems: [], margin_percent: settings.default_margin_percent, sale_price_override: null,
     ...product,
     is_kit: false,
@@ -281,6 +288,23 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
       </div>
 
       <div style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", opacity: 0.6, margin: "0 0 8px" }}>Ficha técnica (materiais usados)</div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+        <input type="checkbox" checked={form.has_stock_control} onChange={(e) => set("has_stock_control", e.target.checked)} />
+        <div>
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Controlar estoque deste produto</div>
+          <div style={{ fontSize: 11, opacity: 0.6 }}>Desmarque para produtos antigos sem estoque real cadastrado — o "Produzir" não vai verificar nem descontar estoque.</div>
+        </div>
+      </label>
+      {(form.bom || []).length > 0 && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+          <div style={{ flex: 2, fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Material</div>
+          <div style={{ flex: 1, fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Quantidade</div>
+          <div style={{ width: 30, fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Unidade</div>
+          <div style={{ width: 66 }} />
+          <div style={{ width: 34 }} />
+          <div style={{ width: 34 }} />
+        </div>
+      )}
       {(form.bom || []).map((line, idx) => {
         const mat = materials.find((m) => m.id === line.material_id);
         return (
@@ -343,7 +367,7 @@ function ProduceModal({ theme, product, onClose, onConfirm }) {
   const [qty, setQty] = useState(1);
   return (
     <Modal theme={theme} title={`Registrar produção — ${product.name}`} onClose={onClose} width={360}>
-      <Field label="Quantidade produzida" hint="O estoque de materiais será descontado automaticamente">
+      <Field label="Quantidade produzida" hint={product.has_stock_control ? "O estoque de materiais será descontado automaticamente" : "Este produto não controla estoque — nada será descontado"}>
         <input type="number" min={1} style={inputStyle(theme)} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} />
       </Field>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>

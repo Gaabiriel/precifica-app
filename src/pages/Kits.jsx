@@ -289,6 +289,16 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
 
       <div style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", opacity: 0.6, margin: "0 0 8px" }}>Materiais extras do kit (opcional)</div>
       <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>Ex.: embalagem específica do kit, laço, cartão — algo que não faz parte de nenhum produto individual.</div>
+      {(form.bom || []).length > 0 && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+          <div style={{ flex: 2, fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Material</div>
+          <div style={{ flex: 1, fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Quantidade</div>
+          <div style={{ width: 30, fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Unidade</div>
+          <div style={{ width: 66 }} />
+          <div style={{ width: 34 }} />
+          <div style={{ width: 34 }} />
+        </div>
+      )}
       {(form.bom || []).map((line, idx) => {
         const mat = materials.find((m) => m.id === line.material_id);
         return (

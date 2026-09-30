@@ -173,7 +173,23 @@ export default function Dashboard({ theme, ownerId, ownerName, showToast, onQuic
     setDragId(null);
   };
 
-  const lowStock = useMemo(() => materials.filter((m) => Number(m.stock) <= Number(m.min_stock)), [materials]);
+  const lowStock = useMemo(() => {
+    // materiais usados só por produtos sem controle de estoque (fichas antigas,
+    // sem estoque real) não devem gerar alerta -- só alerta quem depende deles
+    // de verdade, ou quem não está em nenhuma ficha (estoque avulso).
+    const usedByControlled = new Set();
+    const usedByUncontrolled = new Set();
+    products.forEach((p) => {
+      (p.bom || []).forEach((b) => {
+        (p.has_stock_control === false ? usedByUncontrolled : usedByControlled).add(b.material_id);
+      });
+    });
+    return materials.filter((m) => {
+      if (Number(m.stock) > Number(m.min_stock)) return false;
+      if (usedByUncontrolled.has(m.id) && !usedByControlled.has(m.id)) return false;
+      return true;
+    });
+  }, [materials, products]);
   const stockValue = useMemo(() => materials.reduce((s, m) => s + m.price * m.stock, 0), [materials]);
 
   const productCosts = useMemo(

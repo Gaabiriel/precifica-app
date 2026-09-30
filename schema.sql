@@ -134,6 +134,7 @@ create table public.products (
   margin_percent numeric,            -- se null, usa settings.default_margin_percent
   sale_price_override numeric,
   is_kit boolean not null default false,
+  has_stock_control boolean not null default true,  -- se false, "Produzir" não verifica/desconta estoque (produtos antigos)
   produced_count numeric not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
