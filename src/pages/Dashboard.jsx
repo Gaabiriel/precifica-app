@@ -40,7 +40,7 @@ const WIDGET_DEFS = {
   produtos: statDef("Produtos cadastrados", (ctx) => ({ icon: ShoppingBag, label: "Produtos cadastrados", value: ctx.products.length })),
   produtos_em_estoque: statDef("Produtos em estoque", (ctx) => ({ icon: PackageCheck, label: "Produtos em estoque", value: ctx.finishedStockUnits })),
   materiais: statDef("Materiais em estoque", (ctx) => ({ icon: Boxes, label: "Materiais em estoque", value: ctx.materials.length })),
-  valor_estoque: statDef("Valor em estoque", (ctx) => ({ icon: DollarSign, label: "Valor em estoque", value: brl(ctx.stockValue) })),
+  valor_estoque: statDef("Valor em estoque (materiais)", (ctx) => ({ icon: DollarSign, label: "Valor em estoque (materiais)", value: brl(ctx.stockValue) })),
   valor_estoque_produtos: statDef("Valor de produtos em estoque", (ctx) => ({ icon: Package, label: "Valor de produtos em estoque", value: brl(ctx.finishedStockValue) })),
   margem: statDef("Margem média real", (ctx) => ({ icon: Percent, label: "Margem média real", value: `${ctx.avgMargin.toFixed(0)}%`, tone: ctx.theme.good })),
   lucro_mes: statDef("Lucro do mês", (ctx) => ({ icon: Wallet, label: "Lucro do mês", value: brl(ctx.monthlyProfit), tone: ctx.theme.good })),
@@ -276,11 +276,11 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
         <WelcomeWidget theme={theme} ownerName={ownerName} logoUrl={logoUrl} />
       </div>
 
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 32 }}>
-        <div style={{ flex: "1 1 360px", height: 400 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 32, alignItems: "flex-start" }}>
+        <div style={{ flex: "1 1 360px" }}>
           <CalendarWidget theme={theme} />
         </div>
-        <div style={{ flex: "1 1 360px", height: 400 }}>
+        <div style={{ flex: "1 1 360px" }}>
           <RemindersWidget
             theme={theme} reminders={reminders} ownerId={ownerId}
             onAdd={handleAddReminder} onToggle={handleToggleReminder} onDelete={handleDeleteReminder}
@@ -413,7 +413,7 @@ function CalendarWidget({ theme }) {
   const navBtn = { width: 24, height: 24, borderRadius: 6, border: "none", background: theme.surfaceAlt, color: theme.text, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" };
 
   return (
-    <Card theme={theme} style={{ padding: 18, height: "100%", overflow: "hidden" }}>
+    <Card theme={theme} style={{ padding: 18 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <button style={navBtn} onClick={() => setCursor(new Date(year, month - 1, 1))}><ChevronLeft size={14} /></button>
         <div style={{ fontFamily: SERIF, fontSize: 16.5, fontWeight: 700, textTransform: "capitalize" }}>{monthLabel}</div>
@@ -621,7 +621,7 @@ function RemindersWidget({ theme, reminders, onAdd, onToggle, onDelete }) {
   };
 
   return (
-    <Card theme={theme} style={{ padding: 18, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <Card theme={theme} style={{ padding: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexShrink: 0 }}>
         <ListChecks size={15} color={theme.primary} />
         <div style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700 }}>Lembretes</div>
@@ -638,7 +638,7 @@ function RemindersWidget({ theme, reminders, onAdd, onToggle, onDelete }) {
           <Plus size={15} />
         </button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      <div style={{ maxHeight: 260, overflowY: "auto" }}>
         {reminders.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted }}>Nenhum lembrete por aqui.</div>}
         {reminders.map((r) => (
           <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${theme.border}` }}>
