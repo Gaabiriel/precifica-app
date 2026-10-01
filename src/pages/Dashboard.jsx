@@ -46,7 +46,7 @@ const WIDGET_DEFS = {
   lucro_mes: statDef("Lucro do mês", (ctx) => ({ icon: Wallet, label: "Lucro do mês", value: brl(ctx.monthlyProfit), tone: ctx.theme.good })),
   alertas: statDef("Alertas de estoque baixo", (ctx) => ({ icon: AlertTriangle, label: "Alertas de estoque baixo", value: ctx.lowStock.length, tone: ctx.lowStock.length ? ctx.theme.danger : ctx.theme.good })),
   produto_top: {
-    label: "Produto mais lucrativo do mês", size: "small",
+    label: "Produto mais lucrativo do mês", size: "medium",
     Widget: ({ ctx }) => <TopProductWidget theme={ctx.theme} topProduct={ctx.topProduct} />,
   },
   investimento: {
@@ -488,7 +488,7 @@ function QuickActionsWidget({ theme, products, materials, settings, ownerId, onN
 
 function TopProductWidget({ theme, topProduct }) {
   return (
-    <Card theme={theme} style={{ padding: 18, flex: "1 1 200px", display: "flex", alignItems: "center", gap: 12 }}>
+    <Card theme={theme} style={{ padding: 18, flex: "1 1 280px", display: "flex", alignItems: "center", gap: 12, overflow: "hidden" }}>
       {topProduct?.image ? (
         <img src={topProduct.image} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${theme.border}` }} />
       ) : (
@@ -496,10 +496,10 @@ function TopProductWidget({ theme, topProduct }) {
           <Award size={20} color={theme.textMuted} />
         </div>
       )}
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, color: theme.textMuted }}>
-          <Award size={12} />
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Mais lucrativo do mês</span>
+      <div style={{ minWidth: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, color: theme.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <Award size={12} style={{ flexShrink: 0 }} />
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, overflow: "hidden", textOverflow: "ellipsis" }}>Mais lucrativo do mês</span>
         </div>
         {topProduct ? (
           <>
