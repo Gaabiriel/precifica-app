@@ -413,7 +413,7 @@ function CalendarWidget({ theme }) {
   const navBtn = { width: 24, height: 24, borderRadius: 6, border: "none", background: theme.surfaceAlt, color: theme.text, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" };
 
   return (
-    <Card theme={theme} style={{ padding: 18 }}>
+    <Card theme={theme} style={{ padding: 18, height: "100%", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <button style={navBtn} onClick={() => setCursor(new Date(year, month - 1, 1))}><ChevronLeft size={14} /></button>
         <div style={{ fontFamily: SERIF, fontSize: 16.5, fontWeight: 700, textTransform: "capitalize" }}>{monthLabel}</div>
@@ -621,12 +621,12 @@ function RemindersWidget({ theme, reminders, onAdd, onToggle, onDelete }) {
   };
 
   return (
-    <Card theme={theme} style={{ padding: 18, height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+    <Card theme={theme} style={{ padding: 18, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexShrink: 0 }}>
         <ListChecks size={15} color={theme.primary} />
         <div style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700 }}>Lembretes</div>
       </div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexShrink: 0 }}>
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -638,26 +638,28 @@ function RemindersWidget({ theme, reminders, onAdd, onToggle, onDelete }) {
           <Plus size={15} />
         </button>
       </div>
-      {reminders.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted }}>Nenhum lembrete por aqui.</div>}
-      {reminders.map((r) => (
-        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${theme.border}` }}>
-          <button
-            onClick={() => onToggle(r.id, !r.done)}
-            style={{
-              width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${r.done ? theme.good : theme.border}`,
-              background: r.done ? theme.good : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, padding: 0,
-            }}
-          >
-            {r.done && <Check size={12} />}
-          </button>
-          <span style={{ flex: 1, fontSize: 13, color: r.done ? theme.textMuted : theme.text, textDecoration: r.done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {r.text}
-          </span>
-          <button onClick={() => onDelete(r.id)} style={{ background: "none", border: "none", color: theme.textMuted, cursor: "pointer", display: "flex", flexShrink: 0, padding: 0 }}>
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ))}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        {reminders.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted }}>Nenhum lembrete por aqui.</div>}
+        {reminders.map((r) => (
+          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${theme.border}` }}>
+            <button
+              onClick={() => onToggle(r.id, !r.done)}
+              style={{
+                width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${r.done ? theme.good : theme.border}`,
+                background: r.done ? theme.good : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, padding: 0,
+              }}
+            >
+              {r.done && <Check size={12} />}
+            </button>
+            <span style={{ flex: 1, fontSize: 13, color: r.done ? theme.textMuted : theme.text, textDecoration: r.done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {r.text}
+            </span>
+            <button onClick={() => onDelete(r.id)} style={{ background: "none", border: "none", color: theme.textMuted, cursor: "pointer", display: "flex", flexShrink: 0, padding: 0 }}>
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
