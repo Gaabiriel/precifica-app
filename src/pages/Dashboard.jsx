@@ -277,10 +277,10 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
       </div>
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 32 }}>
-        <div style={{ flex: "1 1 360px" }}>
+        <div style={{ flex: "1 1 360px", height: 400 }}>
           <CalendarWidget theme={theme} />
         </div>
-        <div style={{ flex: "1 1 360px" }}>
+        <div style={{ flex: "1 1 360px", height: 400 }}>
           <RemindersWidget
             theme={theme} reminders={reminders} ownerId={ownerId}
             onAdd={handleAddReminder} onToggle={handleToggleReminder} onDelete={handleDeleteReminder}
