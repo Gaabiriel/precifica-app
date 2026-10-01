@@ -220,10 +220,13 @@ export function ConfirmModal({ theme, title = "Confirmar exclusão", message, co
 
 export function MaterialDetailModal({ theme, material, onClose }) {
   const low = Number(material.stock) <= Number(material.min_stock);
+  const [lightbox, setLightbox] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+  const images = material.image_urls || [];
   return (
     <Modal theme={theme} title={material.name} onClose={onClose} width={420}>
-      {material.image_urls?.[0] ? (
-        <img src={material.image_urls[0]} alt="" style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 8, marginBottom: 14 }} />
+      {images[0] ? (
+        <img src={images[0]} alt="" onClick={() => setLightbox(true)} style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 8, marginBottom: 14, cursor: "zoom-in" }} />
       ) : (
         <div style={{ height: 160, borderRadius: 8, background: theme.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
           <ImageOff size={26} color={theme.textMuted} />
@@ -245,12 +248,60 @@ export function MaterialDetailModal({ theme, material, onClose }) {
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Fechar</Button>
       </div>
+      {lightbox && <Lightbox images={images} index={lightboxIdx} onChangeIndex={setLightboxIdx} onClose={() => setLightbox(false)} />}
     </Modal>
+  );
+}
+
+export function Lightbox({ images, index = 0, onChangeIndex, onClose }) {
+  const list = images && images.length ? images : [];
+  const current = Math.min(index, Math.max(list.length - 1, 0));
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      if (list.length > 1 && e.key === "ArrowLeft") onChangeIndex((current - 1 + list.length) % list.length);
+      if (list.length > 1 && e.key === "ArrowRight") onChangeIndex((current + 1) % list.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [current, list.length, onChangeIndex, onClose]);
+
+  if (list.length === 0) return null;
+  const navBtn = { position: "absolute", top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(10,10,10,0.92)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{ position: "absolute", top: 18, right: 18, width: 38, height: 38, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <X size={18} />
+      </button>
+      <img src={list[current]} alt="" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", maxHeight: "88vh", objectFit: "contain", borderRadius: 6 }} />
+      {list.length > 1 && (
+        <>
+          <button onClick={(e) => { e.stopPropagation(); onChangeIndex((current - 1 + list.length) % list.length); }} style={{ ...navBtn, left: 18 }}>
+            <ChevronLeft size={22} />
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onChangeIndex((current + 1) % list.length); }} style={{ ...navBtn, right: 18 }}>
+            <ChevronRight size={22} />
+          </button>
+          <div style={{ position: "absolute", bottom: 22, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 6 }}>
+            {list.map((_, i) => (
+              <span
+                key={i}
+                onClick={(e) => { e.stopPropagation(); onChangeIndex(i); }}
+                style={{ width: 7, height: 7, borderRadius: "50%", background: i === current ? "#fff" : "rgba(255,255,255,0.4)", cursor: "pointer" }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
 export function Carousel({ theme, images, height = 200 }) {
   const [idx, setIdx] = React.useState(0);
+  const [lightbox, setLightbox] = React.useState(false);
   const list = images && images.length ? images : [];
   const current = Math.min(idx, Math.max(list.length - 1, 0));
   if (list.length === 0) {
@@ -262,7 +313,7 @@ export function Carousel({ theme, images, height = 200 }) {
   }
   return (
     <div style={{ position: "relative", height, borderRadius: 8, overflow: "hidden", background: theme.surfaceAlt }}>
-      <img src={list[current]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      <img src={list[current]} alt="" onClick={() => setLightbox(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "zoom-in" }} />
       {list.length > 1 && (
         <>
           <button onClick={() => setIdx((current - 1 + list.length) % list.length)} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 28, height: 28, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.45)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
@@ -278,6 +329,7 @@ export function Carousel({ theme, images, height = 200 }) {
           </div>
         </>
       )}
+      {lightbox && <Lightbox images={list} index={current} onChangeIndex={setIdx} onClose={() => setLightbox(false)} />}
     </div>
   );
 }

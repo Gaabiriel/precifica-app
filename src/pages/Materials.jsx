@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, History, Upload, X, ImageOff, Lock } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader, Spinner } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader, Spinner, Lightbox } from "../components/ui.jsx";
 import { brl } from "../pricing.js";
 import { supabase } from "../supabaseClient";
 import { fetchMaterials, fetchCategories, fetchProductsFull, saveMaterial, deleteMaterial } from "../data.js";
@@ -149,7 +149,7 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
           return (
             <div key={m.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 110px", padding: "12px 16px", fontSize: 13.5, alignItems: "center", borderBottom: `1px solid ${theme.border}` }}>
               <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <MaterialThumb theme={theme} url={m.image_urls?.[0]} size={30} />
+                <MaterialThumb theme={theme} images={m.image_urls} size={30} />
                 <span style={{ fontWeight: 600 }}>{m.name}</span>
               </span>
               <span style={{ color: theme.textMuted }}>{categoryMap[m.category_id] || "—"}</span>
@@ -173,7 +173,7 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
             <Card key={m.id} theme={theme} style={{ padding: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-                  <MaterialThumb theme={theme} url={m.image_urls?.[0]} size={40} />
+                  <MaterialThumb theme={theme} images={m.image_urls} size={40} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
                     <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>{categoryMap[m.category_id] || "Sem categoria"}</div>
@@ -229,10 +229,18 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
   );
 }
 
-function MaterialThumb({ theme, url, size = 32 }) {
+function MaterialThumb({ theme, images, size = 32 }) {
+  const [lightbox, setLightbox] = useState(false);
+  const [idx, setIdx] = useState(0);
+  const list = images || [];
   return (
     <div style={{ width: size, height: size, borderRadius: 6, overflow: "hidden", background: theme.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      {url ? <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ImageOff size={Math.round(size * 0.45)} color={theme.textMuted} />}
+      {list[0] ? (
+        <img src={list[0]} alt="" onClick={() => { setIdx(0); setLightbox(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }} />
+      ) : (
+        <ImageOff size={Math.round(size * 0.45)} color={theme.textMuted} />
+      )}
+      {lightbox && <Lightbox images={list} index={idx} onChangeIndex={setIdx} onClose={() => setLightbox(false)} />}
     </div>
   );
 }
@@ -244,6 +252,7 @@ function MaterialModal({ theme, material, categories, onClose, onSave }) {
     ...material,
   });
   const [uploading, setUploading] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const uploadImages = async (fileList) => {
@@ -284,7 +293,7 @@ function MaterialModal({ theme, material, categories, onClose, onSave }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {(form.image_urls || []).map((url, idx) => (
             <div key={idx} style={{ position: "relative", width: 56, height: 56, borderRadius: 8, overflow: "hidden", border: `1px solid ${theme.border}` }}>
-              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              <img src={url} alt="" onClick={() => setLightboxIdx(idx)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "zoom-in" }} />
               <button onClick={() => removeImage(idx)} style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
                 <X size={10} />
               </button>
@@ -331,6 +340,9 @@ function MaterialModal({ theme, material, categories, onClose, onSave }) {
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button theme={theme} onClick={() => form.name.trim() && onSave(form)}>Salvar</Button>
       </div>
+      {lightboxIdx != null && (
+        <Lightbox images={form.image_urls || []} index={lightboxIdx} onChangeIndex={setLightboxIdx} onClose={() => setLightboxIdx(null)} />
+      )}
     </Modal>
   );
 }

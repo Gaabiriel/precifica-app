@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Factory, ArrowUpDown, Upload, X, Lock, Eye, Ruler } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
 import { useCatalogData, saveProduct, deleteProduct, produceProduct } from "../data.js";
@@ -8,7 +8,7 @@ import { useCatalogData, saveProduct, deleteProduct, produceProduct } from "../d
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
 const GRID_GAP = 16;
-const ROWS_PER_PAGE = 3;
+const PAGE_SIZE = 20;
 const SORT_OPTIONS = [
   { value: "created_at", label: "Mais recentes" },
   { value: "name", label: "Nome" },
@@ -34,24 +34,6 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
-  const [columns, setColumns] = useState(4);
-  const gridRef = useRef(null);
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    const compute = () => {
-      const width = el.offsetWidth;
-      const cols = Math.max(1, Math.floor((width + GRID_GAP) / (GRID_MIN_CARD + GRID_GAP)));
-      setColumns(cols);
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const PAGE_SIZE = columns * ROWS_PER_PAGE;
 
   const handleSave = async (p) => {
     const { error } = await saveProduct(ownerId, nicheId, p);
@@ -95,7 +77,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
     return list;
   }, [productCosts, q, sortField, sortDir]);
 
-  useEffect(() => { setPage(1); }, [q, sortField, sortDir, PAGE_SIZE]);
+  useEffect(() => { setPage(1); }, [q, sortField, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -131,7 +113,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
         </div>
       )}
 
-      <div ref={gridRef} style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${GRID_MIN_CARD}px,1fr))`, gap: GRID_GAP }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${GRID_MIN_CARD}px,1fr))`, gap: GRID_GAP }}>
         {paged.map(({ product, calc }) => (
           <Card key={product.id} theme={theme} style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ padding: 10, flexShrink: 0 }}>
@@ -219,6 +201,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
   });
   const [uploading, setUploading] = useState(false);
   const [detailMaterial, setDetailMaterial] = useState(null);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const calc = useMemo(() => computeProductCost(form, materials, products, settings), [form, materials, products, settings]);
 
@@ -272,7 +255,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {(form.image_urls || []).map((url, idx) => (
             <div key={idx} style={{ position: "relative", width: 64, height: 64, borderRadius: 8, overflow: "hidden", border: `1px solid ${theme.border}` }}>
-              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              <img src={url} alt="" onClick={() => setLightboxIdx(idx)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "zoom-in" }} />
               <button onClick={() => removeImage(idx)} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
                 <X size={11} />
               </button>
@@ -363,6 +346,9 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
       </div>
 
       {detailMaterial && <MaterialDetailModal theme={theme} material={detailMaterial} onClose={() => setDetailMaterial(null)} />}
+      {lightboxIdx != null && (
+        <Lightbox images={form.image_urls || []} index={lightboxIdx} onChangeIndex={setLightboxIdx} onClose={() => setLightboxIdx(null)} />
+      )}
     </Modal>
   );
 }
