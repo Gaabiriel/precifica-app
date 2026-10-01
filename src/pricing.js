@@ -69,14 +69,20 @@ export function computeProductCost(product, materials, products, settings) {
   const cardFee = priceBeforeFees * (settings.card_fee_percent / 100);
   const suggestedPrice = priceBeforeFees + cardFee;
   const roundedPrice = settings.round_to_90 ? round90(suggestedPrice) : suggestedPrice;
-  const finalPrice = product.sale_price_override ?? roundedPrice;
+  // Um preço manual só é usado se for >= o sugerido (ex.: cobrar um valor
+  // premium de propósito). Se ficar abaixo do sugerido, provavelmente é um
+  // valor antigo que não acompanhou um aumento de custo (material trocado,
+  // mão de obra reajustada etc.) -- nesse caso ignora e usa o sugerido, pra
+  // não vender no prejuízo silenciosamente.
+  const overrideIgnored = product.sale_price_override != null && product.sale_price_override < roundedPrice;
+  const finalPrice = overrideIgnored ? roundedPrice : (product.sale_price_override ?? roundedPrice);
   const profit = finalPrice - subtotal;
   const realMarginPercent = subtotal > 0 ? (profit / subtotal) * 100 : 0;
 
   return {
     lines, materialsCost, laborCost, fixedExpenseShare, maintenanceCost,
     subtotal, margin, cardFee, suggestedPrice, roundedPrice, finalPrice,
-    profit, realMarginPercent,
+    profit, realMarginPercent, overrideIgnored,
   };
 }
 

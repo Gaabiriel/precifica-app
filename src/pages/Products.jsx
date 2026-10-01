@@ -330,7 +330,10 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
           </Field>
         </div>
         <div style={{ flex: "1 1 160px" }}>
-          <Field label="Preço de venda manual (opcional)">
+          <Field
+            label="Preço de venda manual (opcional)"
+            hint={calc.overrideIgnored ? `Ignorado: está abaixo do preço sugerido (${brl(calc.roundedPrice)}) — provavelmente ficou desatualizado depois de uma mudança de custo.` : undefined}
+          >
             <input type="number" step="0.01" style={inputStyle(theme)} value={form.sale_price_override ?? ""} onChange={(e) => set("sale_price_override", e.target.value === "" ? null : parseFloat(e.target.value))} />
           </Field>
         </div>
