@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader, Spinner } from "../components/ui.jsx";
 import { brl } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { fetchMaterials, fetchCategories, saveMaterial, deleteMaterial } from "../data.js";
+import { fetchMaterials, fetchCategories, fetchProductsFull, saveMaterial, deleteMaterial } from "../data.js";
 
 const PAGE_SIZE = 10;
 const MAX_IMAGES = 5;
@@ -12,12 +12,14 @@ const MAX_IMAGES = 5;
 export default function Materials({ theme, ownerId, showToast, maxMaterials, autoOpenNew, onConsumeAutoOpen }) {
   const [materials, setMaterials] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const loadedOnce = useRef(false);
   const [q, setQ] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [onlyLowStock, setOnlyLowStock] = useState(false);
+  const [showOldMaterials, setShowOldMaterials] = useState(false);
   const [sort, setSort] = useState({ field: "name", dir: "asc" });
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState(null); // null | {} | material
@@ -28,9 +30,10 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
 
   const reload = useCallback(async () => {
     if (loadedOnce.current) setRefreshing(true);
-    const [mats, cats] = await Promise.all([fetchMaterials(), fetchCategories()]);
+    const [mats, cats, prods] = await Promise.all([fetchMaterials(), fetchCategories(), fetchProductsFull()]);
     setMaterials(mats);
     setCategories(cats);
+    setProducts(prods);
     loadedOnce.current = true;
     setLoading(false);
     setRefreshing(false);
@@ -42,6 +45,23 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
   }, [autoOpenNew]);
 
   const categoryMap = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c.name])), [categories]);
+
+  // material "antigo": só é usado em produtos sem controle de estoque (fichas
+  // antigas que nunca foram migradas pros materiais reais) -- some da lista
+  // por padrão pra não poluir, com o checkbox "Mostrar materiais antigos" pra
+  // revelar de novo quando precisar.
+  const oldMaterialIds = useMemo(() => {
+    const usedByControlled = new Set();
+    const usedByUncontrolled = new Set();
+    products.forEach((p) => {
+      (p.bom || []).forEach((b) => {
+        (p.has_stock_control === false ? usedByUncontrolled : usedByControlled).add(b.material_id);
+      });
+    });
+    const ids = new Set();
+    usedByUncontrolled.forEach((id) => { if (!usedByControlled.has(id)) ids.add(id); });
+    return ids;
+  }, [products]);
 
   const handleSave = async (m) => {
     const { error } = await saveMaterial(ownerId, m);
@@ -65,6 +85,7 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
     let list = materials.filter((m) => m.name.toLowerCase().includes(q.toLowerCase()));
     if (categoryFilter) list = list.filter((m) => m.category_id === categoryFilter);
     if (onlyLowStock) list = list.filter((m) => Number(m.stock) <= Number(m.min_stock));
+    if (!showOldMaterials) list = list.filter((m) => !oldMaterialIds.has(m.id));
     const dir = sort.dir === "asc" ? 1 : -1;
     list = [...list].sort((a, b) => {
       if (sort.field === "category") {
@@ -75,9 +96,9 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
       return ((va || 0) - (vb || 0)) * dir;
     });
     return list;
-  }, [materials, q, categoryFilter, onlyLowStock, sort, categoryMap]);
+  }, [materials, q, categoryFilter, onlyLowStock, showOldMaterials, oldMaterialIds, sort, categoryMap]);
 
-  useEffect(() => { setPage(1); }, [q, categoryFilter, onlyLowStock, sort]);
+  useEffect(() => { setPage(1); }, [q, categoryFilter, onlyLowStock, showOldMaterials, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -100,6 +121,12 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
             <input type="checkbox" checked={onlyLowStock} onChange={(e) => setOnlyLowStock(e.target.checked)} />
             Só estoque baixo
           </label>
+          {oldMaterialIds.size > 0 && (
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: theme.textMuted, cursor: "pointer" }}>
+              <input type="checkbox" checked={showOldMaterials} onChange={(e) => setShowOldMaterials(e.target.checked)} />
+              Mostrar materiais antigos sem estoque ({oldMaterialIds.size})
+            </label>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {refreshing && <Spinner theme={theme} />}

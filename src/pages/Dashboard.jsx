@@ -276,7 +276,7 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
         <WelcomeWidget theme={theme} ownerName={ownerName} logoUrl={logoUrl} />
       </div>
 
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 32 }}>
         <div style={{ flex: "1 1 360px" }}>
           <CalendarWidget theme={theme} />
         </div>
