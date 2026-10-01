@@ -124,7 +124,7 @@ export default function App() {
               <Tag size={26} color="#fff" />
             </div>
           )}
-          <div style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, lineHeight: 1.4 }}>
+          <div style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, lineHeight: 1.4 }}>
             {profile.full_name || "Precifica"}
           </div>
         </div>
@@ -173,10 +173,10 @@ export default function App() {
             <Menu size={17} />
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: SERIF, fontSize: 11, fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: theme.textMuted, marginBottom: 6 }}>
+            <div style={{ fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: theme.textMuted, marginBottom: 6 }}>
               {niche?.name || "Sem nicho"}
             </div>
-            <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, letterSpacing: "-0.2px" }}>{activeTab?.label}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, letterSpacing: "-0.2px" }}>{activeTab?.label}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button
