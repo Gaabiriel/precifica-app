@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Factory, ArrowUpDown, Upload, X, Lock, Eye, Ruler } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Layers, Package } from "lucide-react";
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, saveProduct, deleteProduct, produceProduct } from "../data.js";
+import { useCatalogData, saveProduct, deleteProduct, usesOldMaterial, productLabel } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -15,13 +15,13 @@ const SORT_OPTIONS = [
   { value: "subtotal", label: "Custo" },
   { value: "finalPrice", label: "Preço de venda" },
   { value: "realMarginPercent", label: "Margem real" },
-  { value: "produced_count", label: "Produzidos" },
+  { value: "stock_qty", label: "Em estoque" },
 ];
 
 export default function Products({ theme, ownerId, nicheId, showToast, maxProducts, autoOpenNew, onConsumeAutoOpen }) {
   const { materials, products, settings, loading, refreshing, reload } = useCatalogData();
   const [modal, setModal] = useState(null);
-  const [produceModal, setProduceModal] = useState(null);
+  const [duplicateSource, setDuplicateSource] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showLimitInfo, setShowLimitInfo] = useState(false);
 
@@ -52,11 +52,13 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
     showToast("Produto removido.");
     reload();
   };
-  const handleProduce = async (product, qty) => {
-    const { error } = await produceProduct({ ownerId, product, qty, materials, products, settings });
-    setProduceModal(null);
-    if (error) { showToast(error.message, "err"); return; }
-    showToast(`Produção registrada: ${qty}x ${product.name}.`);
+  const handleDuplicate = async (source, variant) => {
+    if (atLimit) { setDuplicateSource(null); setShowLimitInfo(true); return; }
+    const { id, created_at, updated_at, produced_count, sold_count, ...rest } = source;
+    const { error } = await saveProduct(ownerId, nicheId, { ...rest, ...variant });
+    if (error) { showToast("Erro ao duplicar produto.", "err"); return; }
+    showToast("Produto duplicado.");
+    setDuplicateSource(null);
     reload();
   };
 
@@ -66,11 +68,20 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
   );
 
   const filteredSorted = useMemo(() => {
-    let list = productCosts.filter(({ product }) => product.name.toLowerCase().includes(q.toLowerCase()));
+    const needle = q.toLowerCase();
+    let list = productCosts.filter(({ product }) =>
+      [product.name, product.color, product.main_material].some((v) => (v || "").toLowerCase().includes(needle))
+    );
     const dir = sortDir === "asc" ? 1 : -1;
+    const sortValue = (row) => {
+      if (sortField === "name") return productLabel(row.product);
+      if (sortField === "stock_qty") return row.product.stock_qty || 0;
+      if (sortField === "created_at") return new Date(row.product.created_at).getTime();
+      return row.calc[sortField];
+    };
     list = [...list].sort((a, b) => {
-      const va = sortField === "name" ? a.product.name : sortField === "produced_count" ? (a.product.produced_count || 0) : sortField === "created_at" ? new Date(a.product.created_at).getTime() : a.calc[sortField];
-      const vb = sortField === "name" ? b.product.name : sortField === "produced_count" ? (b.product.produced_count || 0) : sortField === "created_at" ? new Date(b.product.created_at).getTime() : b.calc[sortField];
+      const va = sortValue(a);
+      const vb = sortValue(b);
       if (typeof va === "string") return va.localeCompare(vb) * dir;
       return ((va || 0) - (vb || 0)) * dir;
     });
@@ -120,29 +131,34 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
               <Carousel theme={theme} images={product.image_urls} height={140} />
             </div>
             <div style={{ padding: "4px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <div style={{ fontWeight: 800, fontSize: 15 }}>{product.name}</div>
-                {product.has_stock_control === false && (
-                  <span title="Este produto não controla estoque de materiais" style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5, background: theme.surfaceAlt, color: theme.textMuted }}>
-                    SEM ESTOQUE
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>{productLabel(product)}</div>
+                {usesOldMaterial(product, materials) && (
+                  <span title="A ficha técnica usa material antigo (sem estoque real)" style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5, background: theme.surfaceAlt, color: theme.textMuted, whiteSpace: "nowrap" }}>
+                    FICHA ANTIGA
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>Produzido: {product.produced_count || 0} un.</div>
-              {product.dimensions && (
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: theme.textMuted, marginBottom: 10, marginTop: -6 }}>
-                  <Ruler size={12} /> {product.dimensions}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
+                {product.main_material && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}><Layers size={12} /> {product.main_material}</div>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <Package size={12} /> Em estoque: <strong style={{ color: theme.text }}>{product.stock_qty || 0} un.</strong>
                 </div>
-              )}
+                {product.dimensions && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}><Ruler size={12} /> {product.dimensions}</div>
+                )}
+              </div>
               <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} />
               <Row theme={theme} label="Preço de venda" value={brl(calc.finalPrice)} bold />
               <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={theme.good} />
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto", paddingTop: 12 }}>
-                <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setProduceModal(product)}>
-                  <Factory size={13} /> Produzir
+                <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setDuplicateSource(product)}>
+                  <Copy size={13} /> Duplicar
                 </Button>
-                <button onClick={() => setModal(product)} style={iconBtn(theme)}><Pencil size={14} /></button>
-                <button onClick={() => setDeleteTarget(product)} style={iconBtn(theme)}><Trash2 size={14} /></button>
+                <button onClick={() => setModal(product)} style={iconBtn(theme)} title="Editar"><Pencil size={14} /></button>
+                <button onClick={() => setDeleteTarget(product)} style={iconBtn(theme)} title="Excluir"><Trash2 size={14} /></button>
               </div>
             </div>
           </Card>
@@ -165,14 +181,13 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
         <ProductModal theme={theme} product={modal} materials={materials} products={products} settings={settings}
           onClose={() => setModal(null)} onSave={handleSave} />
       )}
-      {produceModal && (
-        <ProduceModal theme={theme} product={produceModal} onClose={() => setProduceModal(null)}
-          onConfirm={handleProduce} />
+      {duplicateSource && (
+        <DuplicateModal theme={theme} source={duplicateSource} onClose={() => setDuplicateSource(null)} onConfirm={handleDuplicate} />
       )}
       {deleteTarget && (
         <ConfirmModal
           theme={theme}
-          message={`Tem certeza que quer excluir "${deleteTarget.name}"? Essa ação não pode ser desfeita.`}
+          message={`Tem certeza que quer excluir "${productLabel(deleteTarget)}"? Essa ação não pode ser desfeita.`}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => handleDelete(deleteTarget.id)}
         />
@@ -194,7 +209,8 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
 
 function ProductModal({ theme, product, materials, products, settings, onClose, onSave }) {
   const [form, setForm] = useState({
-    name: "", image_urls: [], labor_minutes: 30, notes: "", dimensions: "", is_kit: false, has_stock_control: true,
+    name: "", image_urls: [], labor_minutes: 30, notes: "", dimensions: "", is_kit: false,
+    main_material: "", color: "", stock_qty: 0,
     bom: [], kitItems: [], margin_percent: settings.default_margin_percent, sale_price_override: null,
     ...product,
     is_kit: false,
@@ -248,6 +264,23 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
           </Field>
         </div>
       </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: "2 1 200px" }}>
+          <Field label="Material principal">
+            <input style={inputStyle(theme)} value={form.main_material || ""} onChange={(e) => set("main_material", e.target.value)} placeholder="Ex: Courvin jacaré" />
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label="Cor">
+            <input style={inputStyle(theme)} value={form.color || ""} onChange={(e) => set("color", e.target.value)} placeholder="Ex: Preto" />
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label="Quantidade em estoque">
+            <input type="number" min={0} style={inputStyle(theme)} value={form.stock_qty ?? 0} onChange={(e) => set("stock_qty", Math.max(0, parseFloat(e.target.value) || 0))} />
+          </Field>
+        </div>
+      </div>
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 5, opacity: 0.75 }}>
           Fotos do produto ({(form.image_urls || []).length}/{MAX_IMAGES})
@@ -272,13 +305,6 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
       </div>
 
       <div style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", opacity: 0.6, margin: "0 0 8px" }}>Ficha técnica (materiais usados)</div>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
-        <input type="checkbox" checked={form.has_stock_control} onChange={(e) => set("has_stock_control", e.target.checked)} />
-        <div>
-          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Controlar estoque deste produto</div>
-          <div style={{ fontSize: 11, opacity: 0.6 }}>Desmarque para produtos antigos sem estoque real cadastrado — o "Produzir" não vai verificar nem descontar estoque.</div>
-        </div>
-      </label>
       {(form.bom || []).length > 0 && (
         <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
           <div style={{ flex: 2, fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Material</div>
@@ -353,16 +379,35 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
   );
 }
 
-function ProduceModal({ theme, product, onClose, onConfirm }) {
-  const [qty, setQty] = useState(1);
+function DuplicateModal({ theme, source, onClose, onConfirm }) {
+  const [color, setColor] = useState("");
+  const [stockQty, setStockQty] = useState(0);
+  const [mainMaterial, setMainMaterial] = useState(source.main_material || "");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    await onConfirm(source, { color: color.trim(), stock_qty: stockQty, main_material: mainMaterial.trim() });
+    setSaving(false);
+  };
+
   return (
-    <Modal theme={theme} title={`Registrar produção — ${product.name}`} onClose={onClose} width={360}>
-      <Field label="Quantidade produzida" hint={product.has_stock_control ? "O estoque de materiais será descontado automaticamente" : "Este produto não controla estoque — nada será descontado"}>
-        <input type="number" min={1} style={inputStyle(theme)} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} />
+    <Modal theme={theme} title={`Duplicar — ${productLabel(source)}`} onClose={onClose} width={400}>
+      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
+        Cria uma cópia com a mesma ficha técnica, fotos e preço. Só defina o que muda nessa variação.
+      </div>
+      <Field label="Cor">
+        <input autoFocus style={inputStyle(theme)} value={color} onChange={(e) => setColor(e.target.value)} placeholder="Ex: Caramelo" />
+      </Field>
+      <Field label="Material principal">
+        <input style={inputStyle(theme)} value={mainMaterial} onChange={(e) => setMainMaterial(e.target.value)} />
+      </Field>
+      <Field label="Quantidade em estoque">
+        <input type="number" min={0} style={inputStyle(theme)} value={stockQty} onChange={(e) => setStockQty(Math.max(0, parseFloat(e.target.value) || 0))} />
       </Field>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button theme={theme} onClick={() => onConfirm(product, qty)}><Factory size={14} /> Confirmar</Button>
+        <Button theme={theme} onClick={submit} disabled={saving}><Copy size={14} /> {saving ? "Duplicando…" : "Duplicar"}</Button>
       </div>
     </Modal>
   );

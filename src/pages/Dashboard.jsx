@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ShoppingBag, Boxes, Percent, AlertTriangle, Wallet, DollarSign, Plus, X, ChevronLeft, ChevronRight,
-  Factory, Award, PiggyBank, Trash2, Check, ListChecks, Package, Heart, PackageCheck,
+  Award, PiggyBank, Trash2, Check, ListChecks, Package, Heart, PackageCheck,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard, Button, Modal, inputStyle } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { SERIF } from "../theme.js";
 import {
-  fetchMaterials, fetchProductsFull, fetchSettings, fetchProductionLogSince, fetchSalesSince, fetchAllSales,
-  fetchQuotes, updateDashboardWidgets, produceProduct,
-  fetchReminders, addReminder, toggleReminder, deleteReminder,
+  fetchMaterials, fetchProductsFull, fetchSettings, fetchSalesSince, fetchAllSales,
+  fetchQuotes, updateDashboardWidgets,
+  fetchReminders, addReminder, toggleReminder, deleteReminder, productLabel,
 } from "../data.js";
 
 const LOW_STOCK_PREVIEW = 5;
@@ -31,10 +31,7 @@ const WIDGET_DEFS = {
   acoes_rapidas: {
     label: "Ações rápidas", size: "wide",
     Widget: ({ ctx }) => (
-      <QuickActionsWidget
-        theme={ctx.theme} products={ctx.products} materials={ctx.materials} settings={ctx.settings}
-        ownerId={ctx.ownerId} onNavigate={ctx.onQuickNavigate} onProduced={ctx.reload} showToast={ctx.showToast}
-      />
+      <QuickActionsWidget theme={ctx.theme} onNavigate={ctx.onQuickNavigate} />
     ),
   },
   produtos: statDef("Produtos cadastrados", (ctx) => ({ icon: ShoppingBag, label: "Produtos cadastrados", value: ctx.products.length })),
@@ -52,10 +49,6 @@ const WIDGET_DEFS = {
   investimento: {
     label: "Recuperação do investimento", size: "medium",
     Widget: ({ ctx }) => <InvestmentWidget theme={ctx.theme} investment={ctx.settings?.initial_investment || 0} recovered={ctx.allTimeProfit} />,
-  },
-  meta_producao: {
-    label: "Meta de produção do mês", size: "medium",
-    Widget: ({ ctx }) => <ProductionGoalWidget theme={ctx.theme} produced={ctx.monthlyUnits} capacity={ctx.settings?.monthly_capacity_units || 0} />,
   },
   grafico_custo_venda: {
     label: "Gráfico: Custo × Preço de venda", size: "large",
@@ -83,7 +76,6 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
   const [materials, setMaterials] = useState([]);
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(null);
-  const [productionLog, setProductionLog] = useState([]);
   const [salesThisMonth, setSalesThisMonth] = useState([]);
   const [quotes, setQuotes] = useState([]);
   const [allSales, setAllSales] = useState([]);
@@ -106,14 +98,13 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
   const loadAll = useCallback(async () => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [mats, prods, st, plog, sales, allSls, qs, rems] = await Promise.all([
-      fetchMaterials(), fetchProductsFull(), fetchSettings(), fetchProductionLogSince(monthStart),
+    const [mats, prods, st, sales, allSls, qs, rems] = await Promise.all([
+      fetchMaterials(), fetchProductsFull(), fetchSettings(),
       fetchSalesSince(monthStart), fetchAllSales(), fetchQuotes(50), fetchReminders(),
     ]);
     setMaterials(mats);
     setProducts(prods);
     setSettings(st);
-    setProductionLog(plog);
     setSalesThisMonth(sales);
     setAllSales(allSls);
     setQuotes(qs);
@@ -169,23 +160,11 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
     setDragId(null);
   };
 
-  const lowStock = useMemo(() => {
-    // materiais usados só por produtos sem controle de estoque (fichas antigas,
-    // sem estoque real) não devem gerar alerta -- só alerta quem depende deles
-    // de verdade, ou quem não está em nenhuma ficha (estoque avulso).
-    const usedByControlled = new Set();
-    const usedByUncontrolled = new Set();
-    products.forEach((p) => {
-      (p.bom || []).forEach((b) => {
-        (p.has_stock_control === false ? usedByUncontrolled : usedByControlled).add(b.material_id);
-      });
-    });
-    return materials.filter((m) => {
-      if (Number(m.stock) > Number(m.min_stock)) return false;
-      if (usedByUncontrolled.has(m.id) && !usedByControlled.has(m.id)) return false;
-      return true;
-    });
-  }, [materials, products]);
+  // materiais antigos (sem estoque real) não geram alerta de estoque baixo.
+  const lowStock = useMemo(
+    () => materials.filter((m) => !m.is_old_material && Number(m.stock) <= Number(m.min_stock)),
+    [materials]
+  );
   const stockValue = useMemo(() => materials.reduce((s, m) => s + m.price * m.stock, 0), [materials]);
 
   const productCosts = useMemo(
@@ -210,7 +189,6 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
     }, 0);
   }, [salesThisMonth, products, materials, settings]);
 
-  const monthlyUnits = useMemo(() => (productionLog || []).reduce((s, l) => s + l.qty, 0), [productionLog]);
 
   const topProduct = useMemo(() => {
     if (!settings) return null;
@@ -220,7 +198,7 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
       const product = productsById[s.product_id];
       if (!product) return;
       const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
-      const cur = map.get(s.product_id) || { name: product.name, image: product.image_urls?.[0] || null, profit: 0 };
+      const cur = map.get(s.product_id) || { name: productLabel(product), image: product.image_urls?.[0] || null, profit: 0 };
       cur.profit += s.total_price - cost;
       map.set(s.product_id, cur);
     });
@@ -242,14 +220,14 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
   const finishedStockValue = useMemo(() => {
     if (!settings) return 0;
     return products.reduce((sum, p) => {
-      const avail = (p.produced_count || 0) - (p.sold_count || 0);
+      const avail = p.stock_qty || 0;
       if (avail <= 0) return sum;
       return sum + avail * computeProductCost(p, materials, products, settings).finalPrice;
     }, 0);
   }, [products, materials, settings]);
 
   const finishedStockUnits = useMemo(
-    () => products.reduce((sum, p) => sum + Math.max((p.produced_count || 0) - (p.sold_count || 0), 0), 0),
+    () => products.reduce((sum, p) => sum + Math.max(p.stock_qty || 0, 0), 0),
     [products]
   );
 
@@ -262,7 +240,7 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
   if (loading) return <div style={{ color: theme.textMuted, fontSize: 13.5 }}>Carregando painel…</div>;
 
   const ctx = {
-    theme, materials, products, settings, lowStock, stockValue, finishedStockValue, finishedStockUnits, avgMargin, monthlyProfit, monthlyUnits,
+    theme, materials, products, settings, lowStock, stockValue, finishedStockValue, finishedStockUnits, avgMargin, monthlyProfit,
     chartData, ownerName, ownerId, quotes, allTimeProfit, topProduct, showToast, reminders,
     onQuickNavigate, reload: loadAll,
     onShowAllLowStock: () => setShowAllLowStock(true),
@@ -441,46 +419,15 @@ function CalendarWidget({ theme }) {
   );
 }
 
-function QuickActionsWidget({ theme, products, materials, settings, ownerId, onNavigate, onProduced, showToast }) {
-  const simpleProducts = useMemo(() => products.filter((p) => !p.is_kit), [products]);
-  const [produceProductId, setProduceProductId] = useState("");
-  const [produceQty, setProduceQty] = useState(1);
-  const [producing, setProducing] = useState(false);
-  const selectedId = produceProductId || simpleProducts[0]?.id || "";
-
-  const handleProduce = async () => {
-    const product = simpleProducts.find((p) => p.id === selectedId);
-    if (!product) return;
-    setProducing(true);
-    const { error } = await produceProduct({ ownerId, product, qty: produceQty, materials, products, settings });
-    setProducing(false);
-    if (error) { showToast(error.message, "err"); return; }
-    showToast(`Produção registrada: ${produceQty}x ${product.name}.`);
-    setProduceQty(1);
-    onProduced();
-  };
-
+function QuickActionsWidget({ theme, onNavigate }) {
   return (
     <Card theme={theme} style={{ padding: 20 }}>
       <div style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, marginBottom: 14 }}>Ações rápidas</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Button theme={theme} variant="soft" onClick={() => onNavigate("materiais", true)}><Plus size={13} /> Novo material</Button>
         <Button theme={theme} variant="soft" onClick={() => onNavigate("produtos", true)}><Plus size={13} /> Novo produto</Button>
+        <Button theme={theme} variant="soft" onClick={() => onNavigate("vendas", false)}><Plus size={13} /> Registrar venda</Button>
         <Button theme={theme} variant="soft" onClick={() => onNavigate("orcamentos", false)}><Plus size={13} /> Novo orçamento</Button>
-      </div>
-      <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.6, marginBottom: 8 }}>Registrar produção</div>
-        {simpleProducts.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: theme.textMuted }}>Cadastre um produto primeiro.</div>
-        ) : (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <select value={selectedId} onChange={(e) => setProduceProductId(e.target.value)} style={{ ...inputStyle(theme), flex: "1 1 180px" }}>
-              {simpleProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <input type="number" min={1} value={produceQty} onChange={(e) => setProduceQty(parseInt(e.target.value) || 1)} style={{ ...inputStyle(theme), width: 70 }} />
-            <Button theme={theme} onClick={handleProduce} disabled={producing}><Factory size={13} /> Produzir</Button>
-          </div>
-        )}
       </div>
     </Card>
   );
@@ -537,19 +484,6 @@ function InvestmentWidget({ theme, investment, recovered }) {
         <div style={{ height: "100%", width: `${pct}%`, background: theme.good }} />
       </div>
       <div style={{ fontSize: 12.5, color: theme.textMuted }}>{brl(recovered)} de {brl(investment)} ({pct.toFixed(0)}%)</div>
-    </Card>
-  );
-}
-
-function ProductionGoalWidget({ theme, produced, capacity }) {
-  const pct = capacity > 0 ? Math.min((produced / capacity) * 100, 100) : 0;
-  return (
-    <Card theme={theme} style={{ padding: 18 }}>
-      <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Meta de produção do mês</div>
-      <div style={{ height: 8, borderRadius: 5, background: theme.surfaceAlt, overflow: "hidden", marginBottom: 10 }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: theme.primary }} />
-      </div>
-      <div style={{ fontSize: 12.5, color: theme.textMuted }}>{produced} de {capacity} un. ({pct.toFixed(0)}%)</div>
     </Card>
   );
 }

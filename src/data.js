@@ -3,7 +3,6 @@
 // globalmente no login).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
-import { computeProductCost } from "./pricing.js";
 
 /* -------------------- BUSCAS -------------------- */
 
@@ -51,14 +50,6 @@ export async function fetchAllSales() {
   return data || [];
 }
 
-export async function fetchProductionLogSince(sinceDate) {
-  const { data } = await supabase
-    .from("production_log")
-    .select("*")
-    .gte("produced_at", sinceDate.toISOString())
-    .order("produced_at", { ascending: false });
-  return data || [];
-}
 
 export async function fetchSalesSince(sinceDate) {
   const { data } = await supabase
@@ -153,39 +144,24 @@ export async function deleteProduct(id) {
   return supabase.from("products").delete().eq("id", id);
 }
 
-export async function produceProduct({ ownerId, product, qty, materials, products, settings }) {
-  if (product.has_stock_control) {
-    const missing = [];
-    (product.bom || []).forEach((b) => {
-      const mat = materials.find((m) => m.id === b.material_id);
-      if (mat && mat.stock < b.qty * qty) missing.push(mat.name);
-    });
-    if (missing.length) return { error: { message: `Estoque insuficiente: ${missing.join(", ")}` } };
+/** "Nome - Cor" quando o produto tem cor (variações duplicadas têm o mesmo nome). */
+export function productLabel(product) {
+  if (!product) return "";
+  return product.color ? `${product.name.trim()} - ${product.color}` : product.name;
+}
 
-    for (const b of product.bom || []) {
-      const mat = materials.find((m) => m.id === b.material_id);
-      if (!mat) continue;
-      await supabase.from("materials").update({ stock: Math.round((mat.stock - b.qty * qty) * 1000) / 1000 }).eq("id", mat.id);
-    }
-  }
-  await supabase.from("products").update({ produced_count: (product.produced_count || 0) + qty }).eq("id", product.id);
-  const calc = computeProductCost(product, materials, products, settings);
-  await supabase.from("production_log").insert({
-    owner_id: ownerId,
-    product_id: product.id,
-    qty,
-    cost_snapshot: { subtotal: calc.subtotal, finalPrice: calc.finalPrice, profit: calc.profit },
-  });
-  return { error: null };
+/** Produto com pelo menos um material antigo (sem estoque real) na ficha técnica não tem como ter o estoque controlado de verdade. */
+export function usesOldMaterial(product, materials) {
+  return (product.bom || []).some((b) => materials.find((m) => m.id === b.material_id)?.is_old_material);
 }
 
 async function registerStockExit({ ownerId, product, qty, totalPrice, notes, type }) {
-  const available = (product.produced_count || 0) - (product.sold_count || 0);
-  if (qty > available) return { error: { message: `Só tem ${available} unidade(s) pronta(s) em estoque.` } };
+  const available = product.stock_qty || 0;
+  if (qty > available) return { error: { message: `Só tem ${available} unidade(s) em estoque.` } };
 
   const { error } = await supabase.from("sales").insert({ owner_id: ownerId, product_id: product.id, qty, total_price: totalPrice, type, notes: notes || null });
   if (error) return { error };
-  await supabase.from("products").update({ sold_count: (product.sold_count || 0) + qty }).eq("id", product.id);
+  await supabase.from("products").update({ stock_qty: available - qty, sold_count: (product.sold_count || 0) + qty }).eq("id", product.id);
   return { error: null };
 }
 
@@ -201,7 +177,10 @@ export async function deleteSale(sale, product) {
   const { error } = await supabase.from("sales").delete().eq("id", sale.id);
   if (error) return { error };
   if (product) {
-    await supabase.from("products").update({ sold_count: Math.max(0, (product.sold_count || 0) - sale.qty) }).eq("id", product.id);
+    await supabase.from("products").update({
+      stock_qty: (product.stock_qty || 0) + sale.qty,
+      sold_count: Math.max(0, (product.sold_count || 0) - sale.qty),
+    }).eq("id", product.id);
   }
   return { error: null };
 }

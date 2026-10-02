@@ -100,6 +100,7 @@ create table public.materials (
   stock numeric not null default 0,
   min_stock numeric not null default 0,
   waste_percent numeric not null default 0,   -- % de perda (sobra de corte etc.)
+  is_old_material boolean not null default false,  -- antigo/sem estoque real: escondido por padrão, sem alerta, e produto que usa ele não desconta estoque
   supplier text,
   image_url text,                    -- legado; ver image_urls abaixo
   image_urls text[] not null default '{}'::text[],  -- até 5 fotos (Supabase Storage)
@@ -134,9 +135,11 @@ create table public.products (
   margin_percent numeric,            -- se null, usa settings.default_margin_percent
   sale_price_override numeric,
   is_kit boolean not null default false,
-  has_stock_control boolean not null default true,  -- se false, "Produzir" não verifica/desconta estoque (produtos antigos)
   produced_count numeric not null default 0,
-  sold_count numeric not null default 0,  -- produced_count - sold_count = pronto, ainda não vendido
+  sold_count numeric not null default 0,
+  main_material text,                       -- material principal (texto livre, só informativo)
+  color text,                               -- cor (texto livre)
+  stock_qty numeric not null default 0,     -- quantidade pronta em estoque; vender desconta daqui
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
