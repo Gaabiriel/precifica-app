@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Copy, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Layers, Package } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions } from "../components/ui.jsx";
+import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
 import { useCatalogData, saveProduct, deleteProduct, usesOldMaterial, productLabel } from "../data.js";
@@ -23,7 +24,9 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
   const [modal, setModal] = useState(null);
   const [duplicateSource, setDuplicateSource] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [viewTarget, setViewTarget] = useState(null);
   const [showLimitInfo, setShowLimitInfo] = useState(false);
+  const [view, setView] = useViewMode("produtos");
 
   useEffect(() => {
     if (autoOpenNew) { setModal({}); onConsumeAutoOpen?.(); }
@@ -101,7 +104,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: 1 }}>
           <input className="toolbar-field" placeholder="Buscar produto…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 220 }} />
-          <div className="toolbar-field" style={{ display: "flex", gap: 8, maxWidth: 204 }}>
+          <div className="toolbar-field" style={{ display: "flex", gap: 8, maxWidth: 280, flex: "1 1 240px" }}>
             <select value={sortField} onChange={(e) => setSortField(e.target.value)} style={{ ...inputStyle(theme), flex: 1 }}>
               {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>Ordenar: {o.label}</option>)}
             </select>
@@ -112,6 +115,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {refreshing && <Spinner theme={theme} />}
+          <ViewToggle theme={theme} value={view} onChange={setView} />
           <Button className="products-new-btn" theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
             {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo produto
           </Button>
@@ -124,6 +128,41 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
         </div>
       )}
 
+      {view === "table" && filteredSorted.length > 0 && (
+        <DataTable
+          theme={theme}
+          rows={paged}
+          rowKey={(r) => r.product.id}
+          columns={[
+            { label: "", width: "44px", render: ({ product }) => <Thumb theme={theme} images={product.image_urls} /> },
+            {
+              label: "Produto", width: "2fr", render: ({ product }) => (
+                <>
+                  <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{productLabel(product)}</span>
+                  {usesOldMaterial(product, materials) && <OldTag theme={theme} />}
+                </>
+              ),
+            },
+            { label: "Material principal", width: "1.3fr", render: ({ product }) => <span style={{ color: theme.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{product.main_material || "—"}</span> },
+            { label: "Estoque", width: "80px", align: "right", render: ({ product }) => <strong>{product.stock_qty || 0}</strong> },
+            { label: "Custo", width: "100px", align: "right", render: ({ calc }) => brl(calc.subtotal) },
+            { label: "Preço", width: "100px", align: "right", render: ({ calc }) => <strong>{brl(calc.finalPrice)}</strong> },
+            { label: "Margem", width: "70px", align: "right", render: ({ calc }) => <span style={{ color: theme.good, fontWeight: 600 }}>{calc.realMarginPercent.toFixed(0)}%</span> },
+            {
+              label: "Ações", width: "150px", align: "right", render: ({ product }) => (
+                <RowActions theme={theme}
+                  onView={() => setViewTarget(product)}
+                  onEdit={() => setModal(product)}
+                  onDuplicate={() => setDuplicateSource(product)}
+                  onDelete={() => setDeleteTarget(product)}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
+
+      {view === "cards" && (
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${GRID_MIN_CARD}px,1fr))`, gap: GRID_GAP }}>
         {paged.map(({ product, calc }) => (
           <Card key={product.id} theme={theme} style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
@@ -133,11 +172,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
             <div style={{ padding: "4px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                 <div style={{ fontWeight: 800, fontSize: 15 }}>{productLabel(product)}</div>
-                {usesOldMaterial(product, materials) && (
-                  <span title="A ficha técnica usa material antigo (sem estoque real)" style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5, background: theme.surfaceAlt, color: theme.textMuted, whiteSpace: "nowrap" }}>
-                    FICHA ANTIGA
-                  </span>
-                )}
+                {usesOldMaterial(product, materials) && <OldTag theme={theme} />}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
                 {product.main_material && (
@@ -164,6 +199,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
           </Card>
         ))}
       </div>
+      )}
       {simpleProducts.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: theme.textMuted, fontSize: 13.5 }}>
           Nenhum produto ainda. Clique em "Novo produto" e monte a ficha técnica.
@@ -183,6 +219,10 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
       )}
       {duplicateSource && (
         <DuplicateModal theme={theme} source={duplicateSource} onClose={() => setDuplicateSource(null)} onConfirm={handleDuplicate} />
+      )}
+      {viewTarget && (
+        <ProductDetailModal theme={theme} product={viewTarget} materials={materials} products={products} settings={settings}
+          onClose={() => setViewTarget(null)} onEdit={() => { setModal(viewTarget); setViewTarget(null); }} />
       )}
       {deleteTarget && (
         <ConfirmModal
@@ -376,6 +416,14 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
         <Lightbox images={form.image_urls || []} index={lightboxIdx} onChangeIndex={setLightboxIdx} onClose={() => setLightboxIdx(null)} />
       )}
     </Modal>
+  );
+}
+
+function OldTag({ theme }) {
+  return (
+    <span title="A ficha técnica usa material antigo (sem estoque real)" style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5, background: theme.surfaceAlt, color: theme.textMuted, whiteSpace: "nowrap", flexShrink: 0 }}>
+      FICHA ANTIGA
+    </span>
   );
 }
 

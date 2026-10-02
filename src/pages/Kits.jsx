@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox } from "../components/ui.jsx";
+import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Copy } from "lucide-react";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions } from "../components/ui.jsx";
+import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, saveProduct, deleteProduct } from "../data.js";
+import { useCatalogData, saveProduct, deleteProduct, productLabel } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -22,7 +23,10 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
   const kits = useMemo(() => products.filter((p) => p.is_kit), [products]);
 
   const [modal, setModal] = useState(null);
+  const [duplicateSource, setDuplicateSource] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [viewTarget, setViewTarget] = useState(null);
+  const [view, setView] = useViewMode("kits");
   const [showLimitInfo, setShowLimitInfo] = useState(false);
   const atLimit = maxProducts != null && products.length >= maxProducts;
   const [q, setQ] = useState("");
@@ -47,6 +51,15 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
     showToast("Kit removido.");
     reload();
   };
+  const handleDuplicate = async (source, variant) => {
+    if (atLimit) { setDuplicateSource(null); setShowLimitInfo(true); return; }
+    const { id, created_at, updated_at, produced_count, sold_count, ...rest } = source;
+    const { error } = await saveProduct(ownerId, nicheId, { ...rest, ...variant });
+    if (error) { showToast("Erro ao duplicar kit.", "err"); return; }
+    showToast("Kit duplicado.");
+    setDuplicateSource(null);
+    reload();
+  };
 
   const kitCosts = useMemo(
     () => (settings ? kits.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
@@ -54,11 +67,11 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
   );
 
   const filteredSorted = useMemo(() => {
-    let list = kitCosts.filter(({ product }) => product.name.toLowerCase().includes(q.toLowerCase()));
+    let list = kitCosts.filter(({ product }) => productLabel(product).toLowerCase().includes(q.toLowerCase()));
     const dir = sortDir === "asc" ? 1 : -1;
     list = [...list].sort((a, b) => {
-      const va = sortField === "name" ? a.product.name : sortField === "created_at" ? new Date(a.product.created_at).getTime() : a.calc[sortField];
-      const vb = sortField === "name" ? b.product.name : sortField === "created_at" ? new Date(b.product.created_at).getTime() : b.calc[sortField];
+      const va = sortField === "name" ? productLabel(a.product) : sortField === "created_at" ? new Date(a.product.created_at).getTime() : a.calc[sortField];
+      const vb = sortField === "name" ? productLabel(b.product) : sortField === "created_at" ? new Date(b.product.created_at).getTime() : b.calc[sortField];
       if (typeof va === "string") return va.localeCompare(vb) * dir;
       return ((va || 0) - (vb || 0)) * dir;
     });
@@ -83,7 +96,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: 1 }}>
           <input className="toolbar-field" placeholder="Buscar kit…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 220 }} />
-          <div className="toolbar-field" style={{ display: "flex", gap: 8, maxWidth: 204 }}>
+          <div className="toolbar-field" style={{ display: "flex", gap: 8, maxWidth: 280, flex: "1 1 240px" }}>
             <select value={sortField} onChange={(e) => setSortField(e.target.value)} style={{ ...inputStyle(theme), flex: 1 }}>
               {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>Ordenar: {o.label}</option>)}
             </select>
@@ -94,6 +107,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {refreshing && <Spinner theme={theme} />}
+          <ViewToggle theme={theme} value={view} onChange={setView} />
           <Button className="products-new-btn" theme={theme} onClick={() => (atLimit ? setShowLimitInfo(true) : setModal({}))}>
             {atLimit ? <Lock size={14} /> : <Plus size={15} />} Novo kit
           </Button>
@@ -106,6 +120,34 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
         </div>
       )}
 
+      {view === "table" && filteredSorted.length > 0 && (
+        <DataTable
+          theme={theme}
+          rows={paged}
+          rowKey={(r) => r.product.id}
+          columns={[
+            { label: "", width: "44px", render: ({ product }) => <Thumb theme={theme} images={product.image_urls} /> },
+            { label: "Kit", width: "2fr", render: ({ product }) => <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{productLabel(product)}</span> },
+            { label: "Itens", width: "60px", align: "right", render: ({ product }) => (product.kitItems || []).length },
+            { label: "Estoque", width: "80px", align: "right", render: ({ product }) => <strong>{product.stock_qty || 0}</strong> },
+            { label: "Custo", width: "100px", align: "right", render: ({ calc }) => brl(calc.subtotal) },
+            { label: "Preço", width: "100px", align: "right", render: ({ calc }) => <strong>{brl(calc.finalPrice)}</strong> },
+            { label: "Margem", width: "70px", align: "right", render: ({ calc }) => <span style={{ color: theme.good, fontWeight: 600 }}>{calc.realMarginPercent.toFixed(0)}%</span> },
+            {
+              label: "Ações", width: "150px", align: "right", render: ({ product }) => (
+                <RowActions theme={theme}
+                  onView={() => setViewTarget(product)}
+                  onEdit={() => setModal(product)}
+                  onDuplicate={() => setDuplicateSource(product)}
+                  onDelete={() => setDeleteTarget(product)}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
+
+      {view === "cards" && (
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${GRID_MIN_CARD}px,1fr))`, gap: GRID_GAP }}>
         {paged.map(({ product, calc }) => (
           <Card key={product.id} theme={theme} style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
@@ -113,7 +155,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
               <Carousel theme={theme} images={product.image_urls} height={140} />
             </div>
             <div style={{ padding: "4px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>{product.name}</div>
+              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>{productLabel(product)}</div>
               <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
                 {(product.kitItems || []).length} {(product.kitItems || []).length === 1 ? "produto" : "produtos"} no kit · Em estoque: <strong style={{ color: theme.text }}>{product.stock_qty || 0} un.</strong>
               </div>
@@ -126,15 +168,17 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
               <Row theme={theme} label="Preço de venda" value={brl(calc.finalPrice)} bold />
               <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={theme.good} />
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto", paddingTop: 12 }}>
-                <Button theme={theme} variant="ghost" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setModal(product)}>
-                  <Pencil size={13} /> Editar
+                <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setDuplicateSource(product)}>
+                  <Copy size={13} /> Duplicar
                 </Button>
-                <button onClick={() => setDeleteTarget(product)} style={iconBtn(theme)}><Trash2 size={14} /></button>
+                <button onClick={() => setModal(product)} style={iconBtn(theme)} title="Editar"><Pencil size={14} /></button>
+                <button onClick={() => setDeleteTarget(product)} style={iconBtn(theme)} title="Excluir"><Trash2 size={14} /></button>
               </div>
             </div>
           </Card>
         ))}
       </div>
+      )}
       {kits.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: theme.textMuted, fontSize: 13.5 }}>
           Nenhum kit ainda. Clique em "Novo kit" pra combinar produtos que você já cadastrou.
@@ -152,10 +196,17 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
         <KitModal theme={theme} kit={modal} materials={materials} products={products} settings={settings}
           onClose={() => setModal(null)} onSave={handleSave} />
       )}
+      {viewTarget && (
+        <ProductDetailModal theme={theme} product={viewTarget} materials={materials} products={products} settings={settings}
+          onClose={() => setViewTarget(null)} onEdit={() => { setModal(viewTarget); setViewTarget(null); }} />
+      )}
+      {duplicateSource && (
+        <DuplicateKitModal theme={theme} source={duplicateSource} products={products} onClose={() => setDuplicateSource(null)} onConfirm={handleDuplicate} />
+      )}
       {deleteTarget && (
         <ConfirmModal
           theme={theme}
-          message={`Tem certeza que quer excluir o kit "${deleteTarget.name}"? Essa ação não pode ser desfeita.`}
+          message={`Tem certeza que quer excluir o kit "${productLabel(deleteTarget)}"? Essa ação não pode ser desfeita.`}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => handleDelete(deleteTarget.id)}
         />
@@ -177,7 +228,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
 
 function KitModal({ theme, kit, materials, products, settings, onClose, onSave }) {
   const [form, setForm] = useState({
-    name: "", image_urls: [], labor_minutes: 0, dimensions: "", is_kit: true, stock_qty: 0,
+    name: "", image_urls: [], labor_minutes: 0, dimensions: "", is_kit: true, stock_qty: 0, color: "",
     bom: [], kitItems: [], margin_percent: settings.default_margin_percent, sale_price_override: null,
     ...kit,
     is_kit: true,
@@ -231,6 +282,11 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
           </Field>
         </div>
         <div style={{ flex: "1 1 120px" }}>
+          <Field label="Cor (opcional)">
+            <input style={inputStyle(theme)} value={form.color || ""} onChange={(e) => set("color", e.target.value)} placeholder="Ex: Preto" />
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 120px" }}>
           <Field label="Quantidade em estoque">
             <input type="number" min={0} style={inputStyle(theme)} value={form.stock_qty ?? 0} onChange={(e) => set("stock_qty", Math.max(0, parseFloat(e.target.value) || 0))} />
           </Field>
@@ -268,7 +324,7 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
       {(form.kitItems || []).map((line, idx) => (
         <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
           <select style={{ ...inputStyle(theme), flex: 2 }} value={line.item_product_id} onChange={(e) => updateKitLine(idx, { item_product_id: e.target.value })}>
-            {otherProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {otherProducts.map((p) => <option key={p.id} value={p.id}>{productLabel(p)}</option>)}
           </select>
           <input type="number" style={{ ...inputStyle(theme), flex: 1 }} value={line.qty} onChange={(e) => updateKitLine(idx, { qty: parseFloat(e.target.value) || 0 })} />
           <button onClick={() => removeKitLine(idx)} style={iconBtn(theme)}><Trash2 size={13} /></button>
@@ -344,6 +400,78 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
       {lightboxIdx != null && (
         <Lightbox images={form.image_urls || []} index={lightboxIdx} onChangeIndex={setLightboxIdx} onClose={() => setLightboxIdx(null)} />
       )}
+    </Modal>
+  );
+}
+
+const variantKey = (p) => (p?.name || "").trim().toLowerCase();
+
+function DuplicateKitModal({ theme, source, products, onClose, onConfirm }) {
+  const [color, setColor] = useState("");
+  const [stockQty, setStockQty] = useState(0);
+  const [items, setItems] = useState((source.kitItems || []).map((it) => ({ ...it })));
+  const [saving, setSaving] = useState(false);
+  const simpleProducts = useMemo(() => products.filter((p) => !p.is_kit), [products]);
+  const byId = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
+
+  const variantsOf = (productId) => {
+    const key = variantKey(byId[productId]);
+    return simpleProducts.filter((p) => variantKey(p) === key);
+  };
+
+  const submit = async () => {
+    setSaving(true);
+    await onConfirm(source, { color: color.trim(), stock_qty: stockQty, kitItems: items });
+    setSaving(false);
+  };
+
+  return (
+    <Modal theme={theme} title={`Duplicar kit — ${productLabel(source)}`} onClose={onClose} width={460}>
+      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
+        Cria uma cópia do kit com as mesmas fotos, materiais extras e preço. Se algum produto do kit tiver outras cores cadastradas, dá pra trocar a variação aqui.
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 180px" }}>
+          <Field label="Cor do kit">
+            <input autoFocus style={inputStyle(theme)} value={color} onChange={(e) => setColor(e.target.value)} placeholder="Ex: Caramelo" />
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label="Quantidade em estoque">
+            <input type="number" min={0} style={inputStyle(theme)} value={stockQty} onChange={(e) => setStockQty(Math.max(0, parseFloat(e.target.value) || 0))} />
+          </Field>
+        </div>
+      </div>
+
+      {items.length > 0 && (
+        <>
+          <div style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", opacity: 0.6, margin: "4px 0 8px" }}>Produtos do kit</div>
+          {items.map((it, idx) => {
+            const variants = variantsOf(it.item_product_id);
+            return (
+              <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 12.5, color: theme.textMuted, width: 28, flexShrink: 0 }}>{it.qty}x</span>
+                {variants.length > 1 ? (
+                  <select
+                    style={{ ...inputStyle(theme), flex: 1 }}
+                    value={it.item_product_id}
+                    onChange={(e) => setItems((list) => list.map((l, i) => (i === idx ? { ...l, item_product_id: e.target.value } : l)))}
+                  >
+                    {variants.map((p) => <option key={p.id} value={p.id}>{productLabel(p)}</option>)}
+                  </select>
+                ) : (
+                  <span style={{ fontSize: 13.5, flex: 1 }}>{productLabel(byId[it.item_product_id]) || "(produto removido)"}</span>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+        <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button theme={theme} onClick={submit} disabled={saving}><Copy size={14} /> {saving ? "Duplicando…" : "Duplicar"}</Button>
+      </div>
     </Modal>
   );
 }

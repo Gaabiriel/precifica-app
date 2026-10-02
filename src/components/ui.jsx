@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ImageOff, MoreVertical } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ImageOff, MoreVertical, LayoutGrid, List, Eye, Pencil, Copy, Trash2 } from "lucide-react";
 import { brl } from "../pricing.js";
 
 export function Spinner({ theme, size = 15, style }) {
@@ -345,3 +345,96 @@ export const UNIT_OPTIONS = [
   { value: "ml", label: "mililitro (ml)" },
   { value: "un", label: "unidade" },
 ];
+
+/** Modo de exibição ("cards" | "table") lembrado por página no navegador. */
+export function useViewMode(key, fallback = "cards") {
+  const storageKey = `precifica.view.${key}`;
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem(storageKey) || fallback; } catch { return fallback; }
+  });
+  const change = (next) => {
+    setMode(next);
+    try { localStorage.setItem(storageKey, next); } catch { /* sem storage, só não lembra */ }
+  };
+  return [mode, change];
+}
+
+export function ViewToggle({ theme, value, onChange }) {
+  const btn = (mode, Icon, title) => (
+    <button
+      onClick={() => onChange(mode)}
+      title={title}
+      style={{
+        width: 34, height: 34, border: "none", borderRadius: 7, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: value === mode ? theme.surface : "transparent",
+        color: value === mode ? theme.text : theme.textMuted,
+        boxShadow: value === mode ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+      }}
+    >
+      <Icon size={15} />
+    </button>
+  );
+  return (
+    <div style={{ display: "flex", gap: 2, padding: 2, borderRadius: 9, background: theme.surfaceAlt, flexShrink: 0 }}>
+      {btn("cards", LayoutGrid, "Ver em cards (com fotos)")}
+      {btn("table", List, "Ver em lista (tabela)")}
+    </div>
+  );
+}
+
+/** Miniatura clicável (abre a foto grande). */
+export function Thumb({ theme, images, size = 38 }) {
+  const [open, setOpen] = useState(false);
+  const [idx, setIdx] = useState(0);
+  const list = images || [];
+  return (
+    <div style={{ width: size, height: size, borderRadius: 6, overflow: "hidden", background: theme.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      {list[0] ? (
+        <img src={list[0]} alt="" onClick={() => { setIdx(0); setOpen(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }} />
+      ) : (
+        <ImageOff size={Math.round(size * 0.42)} color={theme.textMuted} />
+      )}
+      {open && <Lightbox images={list} index={idx} onChangeIndex={setIdx} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+/**
+ * Tabela simples em grid. columns: [{ label, width, align, render(row) }].
+ * Rola na horizontal em tela pequena em vez de espremer as colunas.
+ */
+export function DataTable({ theme, columns, rows, rowKey, minWidth = 760, empty }) {
+  const template = columns.map((c) => c.width || "1fr").join(" ");
+  const cell = (c) => ({ display: "flex", alignItems: "center", justifyContent: c.align === "right" ? "flex-end" : c.align === "center" ? "center" : "flex-start", minWidth: 0, gap: 6 });
+  return (
+    <Card theme={theme} style={{ overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ minWidth }}>
+          <div style={{ display: "grid", gridTemplateColumns: template, gap: 12, padding: "10px 16px", background: theme.surfaceAlt, borderBottom: `1px solid ${theme.border}`, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: theme.textMuted }}>
+            {columns.map((c, i) => <div key={i} style={cell(c)}>{c.label}</div>)}
+          </div>
+          {rows.length === 0 && empty && <div style={{ padding: 24, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>{empty}</div>}
+          {rows.map((row, ri) => (
+            <div key={rowKey(row)} style={{ display: "grid", gridTemplateColumns: template, gap: 12, padding: "9px 16px", alignItems: "center", fontSize: 13.5, borderBottom: ri < rows.length - 1 ? `1px solid ${theme.border}` : "none" }}>
+              {columns.map((c, i) => <div key={i} style={cell(c)}>{c.render(row)}</div>)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** Ações de linha das tabelas de produtos/kits. Só mostra o que for passado. */
+export function RowActions({ theme, onView, onEdit, onDuplicate, onDelete }) {
+  const btn = { ...iconBtn(theme), width: 30, height: 30, borderRadius: 7 };
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      {onView && <button onClick={onView} style={btn} title="Ver produto"><Eye size={13} /></button>}
+      {onEdit && <button onClick={onEdit} style={btn} title="Editar"><Pencil size={13} /></button>}
+      {onDuplicate && <button onClick={onDuplicate} style={btn} title="Duplicar"><Copy size={13} /></button>}
+      {onDelete && <button onClick={onDelete} style={btn} title="Apagar"><Trash2 size={13} /></button>}
+    </div>
+  );
+}
