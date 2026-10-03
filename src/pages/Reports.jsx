@@ -13,7 +13,8 @@ function monthLabel(key) {
 }
 
 export default function Reports({ theme }) {
-  const { materials, products, settings, loading: loadingCatalog } = useCatalogData();
+  // vendas antigas podem ser de produtos já excluídos — por isso usa allProducts.
+  const { materials, allProducts: products, settings, loading: loadingCatalog } = useCatalogData();
   const [sales, setSales] = useState([]);
   const [loadingLog, setLoadingLog] = useState(true);
   const [allSales, setAllSales] = useState([]);

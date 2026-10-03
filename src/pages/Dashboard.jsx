@@ -8,7 +8,7 @@ import { Card, StatCard, Button, Modal, inputStyle } from "../components/ui.jsx"
 import { brl, computeProductCost } from "../pricing.js";
 import { SERIF } from "../theme.js";
 import {
-  fetchMaterials, fetchProductsFull, fetchSettings, fetchSalesSince, fetchAllSales,
+  fetchMaterials, fetchProductsFull, activeProducts, fetchSettings, fetchSalesSince, fetchAllSales,
   fetchQuotes, updateDashboardWidgets,
   fetchReminders, addReminder, toggleReminder, deleteReminder, productLabel,
 } from "../data.js";
@@ -74,7 +74,9 @@ const DEFAULT_WIDGETS = ["produtos", "produtos_em_estoque", "valor_estoque_produ
 
 export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToast, onQuickNavigate }) {
   const [materials, setMaterials] = useState([]);
-  const [products, setProducts] = useState([]);
+  // allProducts inclui os excluídos (vendas antigas ainda apontam pra eles); products = só os ativos.
+  const [allProducts, setAllProducts] = useState([]);
+  const products = useMemo(() => activeProducts(allProducts), [allProducts]);
   const [settings, setSettings] = useState(null);
   const [salesThisMonth, setSalesThisMonth] = useState([]);
   const [quotes, setQuotes] = useState([]);
@@ -103,7 +105,7 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
       fetchSalesSince(monthStart), fetchAllSales(), fetchQuotes(50), fetchReminders(),
     ]);
     setMaterials(mats);
-    setProducts(prods);
+    setAllProducts(prods);
     setSettings(st);
     setSalesThisMonth(sales);
     setAllSales(allSls);
@@ -165,7 +167,11 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
     () => materials.filter((m) => !m.is_old_material && Number(m.stock) <= Number(m.min_stock)),
     [materials]
   );
-  const stockValue = useMemo(() => materials.reduce((s, m) => s + m.price * m.stock, 0), [materials]);
+  // materiais antigos ficam fora: o "estoque" deles não é real.
+  const stockValue = useMemo(
+    () => materials.filter((m) => !m.is_old_material).reduce((s, m) => s + Number(m.price) * Math.max(Number(m.stock), 0), 0),
+    [materials]
+  );
 
   const productCosts = useMemo(
     () => (settings ? products.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
@@ -180,42 +186,42 @@ export default function Dashboard({ theme, ownerId, ownerName, logoUrl, showToas
   // o que foi produzido -- produzir não é lucro até vender de verdade.
   const monthlyProfit = useMemo(() => {
     if (!settings) return 0;
-    const productsById = Object.fromEntries(products.map((p) => [p.id, p]));
+    const productsById = Object.fromEntries(allProducts.map((p) => [p.id, p]));
     return (salesThisMonth || []).reduce((sum, s) => {
       const product = productsById[s.product_id];
       if (!product) return sum;
-      const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
+      const cost = computeProductCost(product, materials, allProducts, settings).subtotal * s.qty;
       return sum + (s.total_price - cost);
     }, 0);
-  }, [salesThisMonth, products, materials, settings]);
+  }, [salesThisMonth, allProducts, materials, settings]);
 
 
   const topProduct = useMemo(() => {
     if (!settings) return null;
     const map = new Map();
-    const productsById = Object.fromEntries(products.map((p) => [p.id, p]));
+    const productsById = Object.fromEntries(allProducts.map((p) => [p.id, p]));
     (salesThisMonth || []).forEach((s) => {
       const product = productsById[s.product_id];
       if (!product) return;
-      const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
+      const cost = computeProductCost(product, materials, allProducts, settings).subtotal * s.qty;
       const cur = map.get(s.product_id) || { name: productLabel(product), image: product.image_urls?.[0] || null, profit: 0 };
       cur.profit += s.total_price - cost;
       map.set(s.product_id, cur);
     });
     const arr = [...map.values()].sort((a, b) => b.profit - a.profit);
     return arr[0] || null;
-  }, [salesThisMonth, products, materials, settings]);
+  }, [salesThisMonth, allProducts, materials, settings]);
 
   const allTimeProfit = useMemo(() => {
     if (!settings) return 0;
-    const productsById = Object.fromEntries(products.map((p) => [p.id, p]));
+    const productsById = Object.fromEntries(allProducts.map((p) => [p.id, p]));
     return (allSales || []).reduce((sum, s) => {
       const product = productsById[s.product_id];
       if (!product) return sum;
-      const cost = computeProductCost(product, materials, products, settings).subtotal * s.qty;
+      const cost = computeProductCost(product, materials, allProducts, settings).subtotal * s.qty;
       return sum + (s.total_price - cost);
     }, 0);
-  }, [allSales, products, materials, settings]);
+  }, [allSales, allProducts, materials, settings]);
 
   const finishedStockValue = useMemo(() => {
     if (!settings) return 0;

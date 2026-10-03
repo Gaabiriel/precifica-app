@@ -1,16 +1,26 @@
 // Camada de dados — busca e mutações do Supabase, usadas pelas páginas.
 // Cada página busca só o que precisa, quando é aberta (nada é pré-carregado
 // globalmente no login).
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 
 /* -------------------- BUSCAS -------------------- */
+
+/** Produtos não excluídos. */
+export function activeProducts(products) {
+  return products.filter((p) => !p.deleted_at);
+}
 
 export async function fetchMaterials() {
   const { data } = await supabase.from("materials").select("*").order("name");
   return data || [];
 }
 
+/**
+ * Traz TODOS os produtos, inclusive os excluídos (`deleted_at` preenchido) —
+ * eles continuam no banco pra que vendas antigas ainda achem o produto
+ * (histórico e lucro). Use `activeProducts()` pra listar só os que valem.
+ */
 export async function fetchProductsFull() {
   const [{ data: prods }, { data: pMats }, { data: kitItems }] = await Promise.all([
     supabase.from("products").select("*").order("name"),
@@ -69,7 +79,7 @@ export async function fetchSalesSince(sinceDate) {
  */
 export function useCatalogData() {
   const [materials, setMaterials] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -79,7 +89,7 @@ export function useCatalogData() {
     if (loadedOnce.current) setRefreshing(true);
     const [mats, prods, st] = await Promise.all([fetchMaterials(), fetchProductsFull(), fetchSettings()]);
     setMaterials(mats);
-    setProducts(prods);
+    setAllProducts(prods);
     setSettings(st);
     loadedOnce.current = true;
     setLoading(false);
@@ -88,7 +98,9 @@ export function useCatalogData() {
 
   useEffect(() => { reload(); }, [reload]);
 
-  return { materials, products, settings, loading, refreshing, reload };
+  // `products` = só os ativos (listagens); `allProducts` inclui os excluídos (vendas antigas).
+  const products = useMemo(() => activeProducts(allProducts), [allProducts]);
+  return { materials, products, allProducts, settings, loading, refreshing, reload };
 }
 
 /* -------------------- MUTAÇÕES -------------------- */
@@ -140,8 +152,23 @@ export async function saveProduct(ownerId, nicheId, p) {
   return { error: null };
 }
 
+/**
+ * Exclusão "lógica": marca `deleted_at` em vez de apagar a linha, pra que as
+ * vendas já registradas do produto continuem no histórico. Bloqueia se o
+ * produto ainda faz parte de algum kit ativo.
+ */
 export async function deleteProduct(id) {
-  return supabase.from("products").delete().eq("id", id);
+  const { data: usages, error: usageError } = await supabase.from("product_kit_items").select("kit_product_id").eq("item_product_id", id);
+  if (usageError) return { error: usageError };
+  const kitIds = [...new Set((usages || []).map((u) => u.kit_product_id))];
+  if (kitIds.length) {
+    const { data: kits, error: kitsError } = await supabase.from("products").select("name").in("id", kitIds).is("deleted_at", null);
+    if (kitsError) return { error: kitsError };
+    if ((kits || []).length) {
+      return { error: { message: `Este produto faz parte do kit "${kits[0].name}". Remova-o do kit antes de excluir.` } };
+    }
+  }
+  return supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id);
 }
 
 /** "Nome - Cor" quando o produto tem cor (variações duplicadas têm o mesmo nome). */

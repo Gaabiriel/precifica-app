@@ -140,6 +140,7 @@ create table public.products (
   main_material text,                       -- material principal (texto livre, só informativo)
   color text,                               -- cor (texto livre)
   stock_qty numeric not null default 0,     -- quantidade pronta em estoque; vender desconta daqui
+  deleted_at timestamptz,                    -- exclusão lógica: preenchido = excluído (some das listagens, vendas antigas continuam apontando pra ele)
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

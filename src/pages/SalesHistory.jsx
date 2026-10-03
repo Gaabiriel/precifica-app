@@ -5,7 +5,7 @@ import { brl } from "../pricing.js";
 import { useCatalogData, deleteSale, fetchSales, productLabel } from "../data.js";
 
 export default function SalesHistory({ theme, showToast }) {
-  const { products, loading, reload } = useCatalogData();
+  const { allProducts, loading, reload } = useCatalogData();
   const [sales, setSales] = useState([]);
   const [loadingSales, setLoadingSales] = useState(true);
   const [undoTarget, setUndoTarget] = useState(null);
@@ -19,7 +19,7 @@ export default function SalesHistory({ theme, showToast }) {
   };
   useEffect(() => { loadSales(); }, []);
 
-  const productsById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
+  const productsById = useMemo(() => Object.fromEntries(allProducts.map((p) => [p.id, p])), [allProducts]);
 
   const rows = useMemo(() => {
     const needle = q.toLowerCase();
@@ -81,7 +81,10 @@ export default function SalesHistory({ theme, showToast }) {
           {
             label: "Produto", width: "2fr", render: (s) => (
               <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {productLabel(productsById[s.product_id]) || "(produto removido)"}
+                {productLabel(productsById[s.product_id]) || "Produto"}
+                {(!productsById[s.product_id] || productsById[s.product_id].deleted_at) && (
+                  <span style={{ fontWeight: 500, color: theme.textMuted }}> (produto removido)</span>
+                )}
               </span>
             ),
           },

@@ -45,7 +45,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
     const { error } = await deleteProduct(id);
     setDeleteTarget(null);
     if (error) {
-      showToast(error.code === "23503" ? "Este kit é usado em outro kit. Remova-o antes." : "Erro ao excluir.", "err");
+      showToast(error.message || "Erro ao excluir.", "err");
       return;
     }
     showToast("Kit removido.");
