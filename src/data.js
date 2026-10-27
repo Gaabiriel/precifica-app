@@ -49,7 +49,7 @@ export async function fetchQuotes(limit = 10) {
   return data || [];
 }
 
-export async function fetchSales(limit = 200) {
+export async function fetchSales(limit = 2000) {
   const { data } = await supabase.from("sales").select("*").order("sold_at", { ascending: false }).limit(limit);
   return data || [];
 }
