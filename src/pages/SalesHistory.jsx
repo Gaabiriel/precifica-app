@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Undo2 } from "lucide-react";
-import { inputStyle, iconBtn, ConfirmModal, Spinner, DataTable, Thumb } from "../components/ui.jsx";
+import { Undo2, Pencil } from "lucide-react";
+import { inputStyle, iconBtn, ConfirmModal, Spinner, DataTable, Thumb, Modal, Field, Button } from "../components/ui.jsx";
 import { brl } from "../pricing.js";
-import { useCatalogData, deleteSale, fetchSales, productLabel, SALE_TYPES, saleTypeLabel } from "../data.js";
+import { useCatalogData, deleteSale, updateSale, fetchSales, productLabel, SALE_TYPES, saleTypeLabel } from "../data.js";
 
 export default function SalesHistory({ theme, showToast }) {
   const { allProducts, loading, reload } = useCatalogData();
   const [sales, setSales] = useState([]);
   const [loadingSales, setLoadingSales] = useState(true);
   const [undoTarget, setUndoTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
   const [q, setQ] = useState("");
   const [type, setType] = useState("all");
 
@@ -40,6 +41,15 @@ export default function SalesHistory({ theme, showToast }) {
     setUndoTarget(null);
     if (error) { showToast("Erro ao desfazer.", "err"); return; }
     showToast(sale.type === "venda" ? "Venda desfeita." : "Saída desfeita.");
+    reload();
+    loadSales();
+  };
+
+  const handleEdit = async (sale, changes) => {
+    const { error } = await updateSale(sale, productsById[sale.product_id], changes);
+    if (error) { showToast(error.message || "Erro ao salvar.", "err"); return; }
+    setEditTarget(null);
+    showToast("Registro atualizado.");
     reload();
     loadSales();
   };
@@ -92,15 +102,24 @@ export default function SalesHistory({ theme, showToast }) {
           { label: "Valor", width: "100px", align: "right", render: (s) => <strong>{s.type !== "venda" ? "—" : brl(s.total_price)}</strong> },
           { label: "Observação", width: "1.4fr", render: (s) => <span style={{ color: theme.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</span> },
           {
-            label: "", width: "40px", align: "right", render: (s) => (
-              <button onClick={() => setUndoTarget(s)} style={{ ...iconBtn(theme), width: 30, height: 30 }} title="Desfazer (devolve ao estoque)">
-                <Undo2 size={13} />
-              </button>
+            label: "", width: "72px", align: "right", render: (s) => (
+              <div style={{ display: "flex", gap: 4 }}>
+                <button onClick={() => setEditTarget(s)} style={{ ...iconBtn(theme), width: 30, height: 30 }} title="Editar">
+                  <Pencil size={13} />
+                </button>
+                <button onClick={() => setUndoTarget(s)} style={{ ...iconBtn(theme), width: 30, height: 30 }} title="Desfazer (devolve ao estoque)">
+                  <Undo2 size={13} />
+                </button>
+              </div>
             ),
           },
         ]}
       />
 
+      {editTarget && (
+        <EditSaleModal theme={theme} sale={editTarget} product={productsById[editTarget.product_id]}
+          onClose={() => setEditTarget(null)} onSave={(changes) => handleEdit(editTarget, changes)} />
+      )}
       {undoTarget && (
         <ConfirmModal
           theme={theme}
@@ -127,5 +146,78 @@ function TypeBadge({ theme, type }) {
     >
       {saleTypeLabel(type).toUpperCase()}
     </span>
+  );
+}
+
+function toDateInput(d) {
+  const date = new Date(d);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function EditSaleModal({ theme, sale, product, onClose, onSave }) {
+  const [type, setType] = useState(sale.type);
+  const [qty, setQty] = useState(Number(sale.qty));
+  const [totalPrice, setTotalPrice] = useState(Number(sale.total_price) || 0);
+  const [date, setDate] = useState(toDateInput(sale.sold_at));
+  const [notes, setNotes] = useState(sale.notes || "");
+  const [saving, setSaving] = useState(false);
+  const isSale = type === "venda";
+  const maxQty = Number(sale.qty) + (product?.stock_qty || 0);
+
+  const save = async () => {
+    setSaving(true);
+    // data igual à original mantém o horário gravado; data nova vai pro meio-dia local (evita cair no dia vizinho por fuso)
+    const soldAt = date === toDateInput(sale.sold_at) ? sale.sold_at : new Date(`${date}T12:00:00`).toISOString();
+    await onSave({ type, qty, totalPrice, notes, soldAt });
+    setSaving(false);
+  };
+
+  const typeBtn = (active) => ({
+    padding: "7px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+    border: `1px solid ${active ? theme.primary : theme.border}`,
+    background: active ? theme.primarySoft : theme.surface,
+    color: active ? theme.primary : theme.text,
+  });
+
+  return (
+    <Modal theme={theme} title={`Editar registro — ${productLabel(product) || "Produto removido"}`} onClose={onClose} width={420}>
+      <Field label="Tipo">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {SALE_TYPES.map((t) => (
+            <button key={t.value} type="button" onClick={() => setType(t.value)} style={typeBtn(type === t.value)}>{t.label}</button>
+          ))}
+        </div>
+      </Field>
+      {!isSale && (
+        <div style={{ fontSize: 12, color: theme.textMuted, margin: "-4px 0 12px", lineHeight: 1.5 }}>
+          Não entra no faturamento nem no lucro.
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label={product ? `Quantidade (até ${maxQty})` : "Quantidade"} hint="Mudar a quantidade ajusta o estoque do produto.">
+            <input type="number" min={1} max={product ? maxQty : undefined} style={inputStyle(theme)} value={qty}
+              onChange={(e) => setQty(Math.max(1, Math.min(product ? maxQty : Infinity, parseInt(e.target.value) || 1)))} />
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label="Data">
+            <input type="date" style={inputStyle(theme)} value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+          </Field>
+        </div>
+      </div>
+      {isSale && (
+        <Field label="Valor total cobrado">
+          <input type="number" step="0.01" min={0} style={inputStyle(theme)} value={totalPrice} onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)} />
+        </Field>
+      )}
+      <Field label="Observação (opcional)">
+        <input style={inputStyle(theme)} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+        <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button theme={theme} onClick={save} disabled={saving}>Salvar alterações</Button>
+      </div>
+    </Modal>
   );
 }

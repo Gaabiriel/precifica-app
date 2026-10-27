@@ -214,6 +214,32 @@ export async function registerStockExit({ ownerId, product, qty, totalPrice, not
   return { error: null };
 }
 
+/**
+ * Edita um registro do histórico (tipo, quantidade, valor, data, observação).
+ * Se a quantidade mudar, a diferença sai (ou volta) do estoque do produto.
+ */
+export async function updateSale(sale, product, changes) {
+  const delta = Number(changes.qty) - Number(sale.qty);
+  if (product && delta > 0 && delta > (product.stock_qty || 0)) {
+    return { error: { message: `Só tem ${product.stock_qty || 0} unidade(s) a mais em estoque.` } };
+  }
+  const { error } = await supabase.from("sales").update({
+    type: changes.type,
+    qty: changes.qty,
+    total_price: changes.type === "venda" ? changes.totalPrice : 0,
+    sold_at: changes.soldAt,
+    notes: changes.notes || null,
+  }).eq("id", sale.id);
+  if (error) return { error };
+  if (product && delta !== 0) {
+    await supabase.from("products").update({
+      stock_qty: (product.stock_qty || 0) - delta,
+      sold_count: Math.max(0, (product.sold_count || 0) + delta),
+    }).eq("id", product.id);
+  }
+  return { error: null };
+}
+
 export async function deleteSale(sale, product) {
   const { error } = await supabase.from("sales").delete().eq("id", sale.id);
   if (error) return { error };
