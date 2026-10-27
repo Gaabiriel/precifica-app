@@ -3,7 +3,7 @@ import { ShoppingCart, MinusCircle, ArrowUpDown, Eye } from "lucide-react";
 import { Card, Button, Field, inputStyle, iconBtn, Modal, Row, Spinner, Carousel, ViewToggle, useViewMode, DataTable, Thumb } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
-import { useCatalogData, registerSale, removeFromStock, productLabel } from "../data.js";
+import { useCatalogData, registerStockExit, productLabel, SALE_TYPES } from "../data.js";
 
 const SORT_OPTIONS = [
   { value: "created_at", label: "Mais recentes" },
@@ -14,8 +14,8 @@ const SORT_OPTIONS = [
 
 export default function Sales({ theme, ownerId, showToast }) {
   const { materials, products, settings, loading, reload } = useCatalogData();
-  const [saleTarget, setSaleTarget] = useState(null);
-  const [removeTarget, setRemoveTarget] = useState(null);
+  // { row, type } — tipo inicial do modal ("venda" pelo botão Vender, "presente" pelo de outras saídas)
+  const [exitTarget, setExitTarget] = useState(null);
   const [viewTarget, setViewTarget] = useState(null);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");
@@ -44,26 +44,20 @@ export default function Sales({ theme, ownerId, showToast }) {
       });
   }, [products, materials, settings, q, kind, sortField, sortDir]);
 
-  const handleSale = async (product, qty, totalPrice, notes) => {
-    const { error } = await registerSale({ ownerId, product, qty, totalPrice, notes });
-    setSaleTarget(null);
+  const handleExit = async (product, entry) => {
+    const { error } = await registerStockExit({ ownerId, product, ...entry });
+    setExitTarget(null);
     if (error) { showToast(error.message, "err"); return; }
-    showToast("Venda registrada.");
-    reload();
-  };
-
-  const handleRemove = async (product, qty, notes) => {
-    const { error } = await removeFromStock({ ownerId, product, qty, notes });
-    setRemoveTarget(null);
-    if (error) { showToast(error.message, "err"); return; }
-    showToast("Removido do estoque.");
+    showToast(entry.type === "venda" ? "Venda registrada." : "Saída registrada.");
     reload();
   };
 
   if (loading) return <Spinner theme={theme} />;
 
   const smallBtn = { ...iconBtn(theme), width: 30, height: 30, borderRadius: 7 };
-  const removeTitle = "Remover do estoque (sem venda) — defeito, perda, brinde…";
+  const removeTitle = "Outra saída (sem venda) — presente, brinde, divulgação, perda…";
+  const openSale = (r) => setExitTarget({ row: r, type: "venda" });
+  const openOtherExit = (r) => setExitTarget({ row: r, type: "presente" });
 
   return (
     <div>
@@ -114,10 +108,10 @@ export default function Sales({ theme, ownerId, showToast }) {
               label: "Ações", width: "190px", align: "right", render: (r) => (
                 <div style={{ display: "flex", gap: 4 }}>
                   <button onClick={() => setViewTarget(r.product)} style={smallBtn} title="Ver produto"><Eye size={13} /></button>
-                  <Button theme={theme} variant="soft" style={{ height: 30, padding: "0 10px", fontSize: 12.5 }} onClick={() => setSaleTarget(r)}>
+                  <Button theme={theme} variant="soft" style={{ height: 30, padding: "0 10px", fontSize: 12.5 }} onClick={() => openSale(r)}>
                     <ShoppingCart size={12} /> Vender
                   </Button>
-                  <button onClick={() => setRemoveTarget(r)} style={smallBtn} title={removeTitle}><MinusCircle size={13} /></button>
+                  <button onClick={() => openOtherExit(r)} style={smallBtn} title={removeTitle}><MinusCircle size={13} /></button>
                 </div>
               ),
             },
@@ -133,11 +127,11 @@ export default function Sales({ theme, ownerId, showToast }) {
                 <Row theme={theme} label="Em estoque" value={`${r.avail} un.`} bold tone={theme.good} />
                 <Row theme={theme} label="Preço sugerido" value={brl(r.calc.finalPrice)} />
                 <div style={{ display: "flex", gap: 6, marginTop: "auto", paddingTop: 12 }}>
-                  <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 32, fontSize: 12.5 }} onClick={() => setSaleTarget(r)}>
+                  <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 32, fontSize: 12.5 }} onClick={() => openSale(r)}>
                     <ShoppingCart size={12} /> Vender
                   </Button>
                   <button title="Ver produto" onClick={() => setViewTarget(r.product)} style={iconBtn(theme)}><Eye size={14} /></button>
-                  <button title={removeTitle} onClick={() => setRemoveTarget(r)} style={iconBtn(theme)}><MinusCircle size={14} /></button>
+                  <button title={removeTitle} onClick={() => openOtherExit(r)} style={iconBtn(theme)}><MinusCircle size={14} /></button>
                 </div>
               </div>
             </Card>
@@ -145,8 +139,9 @@ export default function Sales({ theme, ownerId, showToast }) {
         </div>
       )}
 
-      {saleTarget && <SaleModal theme={theme} target={saleTarget} onClose={() => setSaleTarget(null)} onConfirm={handleSale} />}
-      {removeTarget && <RemoveModal theme={theme} target={removeTarget} onClose={() => setRemoveTarget(null)} onConfirm={handleRemove} />}
+      {exitTarget && (
+        <StockExitModal theme={theme} target={exitTarget.row} initialType={exitTarget.type} onClose={() => setExitTarget(null)} onConfirm={handleExit} />
+      )}
       {viewTarget && (
         <ProductDetailModal theme={theme} product={viewTarget} materials={materials} products={products} settings={settings} onClose={() => setViewTarget(null)} />
       )}
@@ -154,11 +149,20 @@ export default function Sales({ theme, ownerId, showToast }) {
   );
 }
 
-function SaleModal({ theme, target, onClose, onConfirm }) {
+function todayInput() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Registro de saída do estoque: tipo (venda, presente, brinde…), quantidade, data e — só pra venda — valor cobrado. */
+function StockExitModal({ theme, target, initialType, onClose, onConfirm }) {
   const { product, calc, avail } = target;
+  const [type, setType] = useState(initialType);
   const [qty, setQty] = useState(1);
   const [totalPrice, setTotalPrice] = useState(Math.round(calc.finalPrice * 100) / 100);
+  const [date, setDate] = useState(todayInput);
   const [notes, setNotes] = useState("");
+  const isSale = type === "venda";
 
   const setQtyClamped = (v) => {
     const n = Math.min(avail, Math.max(1, v || 1));
@@ -166,44 +170,58 @@ function SaleModal({ theme, target, onClose, onConfirm }) {
     setTotalPrice(Math.round(calc.finalPrice * n * 100) / 100);
   };
 
+  const confirm = () => {
+    // hoje: usa o horário atual; outra data: meio-dia local, pra não cair no dia/mês vizinho por fuso.
+    const soldAt = date === todayInput() ? new Date().toISOString() : new Date(`${date}T12:00:00`).toISOString();
+    onConfirm(product, { type, qty, totalPrice, notes, soldAt });
+  };
+
+  const typeBtn = (active) => ({
+    padding: "7px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+    border: `1px solid ${active ? theme.primary : theme.border}`,
+    background: active ? theme.primarySoft : theme.surface,
+    color: active ? theme.primary : theme.text,
+  });
+
   return (
-    <Modal theme={theme} title={`Registrar venda — ${productLabel(product)}`} onClose={onClose} width={380}>
-      <Field label={`Quantidade (${avail} disponível)`}>
-        <input type="number" min={1} max={avail} style={inputStyle(theme)} value={qty} onChange={(e) => setQtyClamped(parseInt(e.target.value))} />
+    <Modal theme={theme} title={`Registrar saída — ${productLabel(product)}`} onClose={onClose} width={420}>
+      <Field label="Tipo">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {SALE_TYPES.map((t) => (
+            <button key={t.value} type="button" onClick={() => setType(t.value)} style={typeBtn(type === t.value)}>{t.label}</button>
+          ))}
+        </div>
       </Field>
-      <Field label="Valor total cobrado" hint="Já vem sugerido pelo preço de venda calculado — edite se deu desconto ou negociou diferente">
-        <input type="number" step="0.01" style={inputStyle(theme)} value={totalPrice} onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)} />
-      </Field>
+      {!isSale && (
+        <div style={{ fontSize: 12, color: theme.textMuted, margin: "-4px 0 12px", lineHeight: 1.5 }}>
+          Só tira a peça do estoque — não entra no faturamento nem no lucro.
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label={`Quantidade (${avail} disponível)`}>
+            <input type="number" min={1} max={avail} style={inputStyle(theme)} value={qty} onChange={(e) => setQtyClamped(parseInt(e.target.value))} />
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <Field label="Data">
+            <input type="date" max={todayInput()} style={inputStyle(theme)} value={date} onChange={(e) => setDate(e.target.value || todayInput())} />
+          </Field>
+        </div>
+      </div>
+      {isSale && (
+        <Field label="Valor total cobrado" hint="Já vem com o preço de venda do produto — edite se deu desconto ou negociou diferente">
+          <input type="number" step="0.01" style={inputStyle(theme)} value={totalPrice} onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)} />
+        </Field>
+      )}
       <Field label="Observação (opcional)">
-        <input style={inputStyle(theme)} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <input style={inputStyle(theme)} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={isSale ? "Ex: cliente Maria" : "Ex: presente de aniversário"} />
       </Field>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button theme={theme} onClick={() => onConfirm(product, qty, totalPrice, notes)}><ShoppingCart size={14} /> Confirmar venda</Button>
-      </div>
-    </Modal>
-  );
-}
-
-function RemoveModal({ theme, target, onClose, onConfirm }) {
-  const { product, avail } = target;
-  const [qty, setQty] = useState(1);
-  const [notes, setNotes] = useState("");
-
-  return (
-    <Modal theme={theme} title={`Remover do estoque — ${productLabel(product)}`} onClose={onClose} width={380}>
-      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
-        Use isso pra tirar unidades do estoque de prontos sem registrar uma venda — ex.: peça com defeito, perdida, ou dada de brinde.
-      </div>
-      <Field label={`Quantidade (${avail} disponível)`}>
-        <input type="number" min={1} max={avail} style={inputStyle(theme)} value={qty} onChange={(e) => setQty(Math.min(avail, Math.max(1, parseInt(e.target.value) || 1)))} />
-      </Field>
-      <Field label="Motivo (opcional)">
-        <input style={inputStyle(theme)} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ex: defeito de costura" />
-      </Field>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
-        <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button theme={theme} onClick={() => onConfirm(product, qty, notes)}><MinusCircle size={14} /> Confirmar remoção</Button>
+        <Button theme={theme} onClick={confirm}>
+          {isSale ? <><ShoppingCart size={14} /> Confirmar venda</> : <><MinusCircle size={14} /> Confirmar saída</>}
+        </Button>
       </div>
     </Modal>
   );

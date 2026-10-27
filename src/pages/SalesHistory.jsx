@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Undo2 } from "lucide-react";
 import { inputStyle, iconBtn, ConfirmModal, Spinner, DataTable, Thumb } from "../components/ui.jsx";
 import { brl } from "../pricing.js";
-import { useCatalogData, deleteSale, fetchSales, productLabel } from "../data.js";
+import { useCatalogData, deleteSale, fetchSales, productLabel, SALE_TYPES, saleTypeLabel } from "../data.js";
 
 export default function SalesHistory({ theme, showToast }) {
   const { allProducts, loading, reload } = useCatalogData();
@@ -39,7 +39,7 @@ export default function SalesHistory({ theme, showToast }) {
     const { error } = await deleteSale(sale, productsById[sale.product_id]);
     setUndoTarget(null);
     if (error) { showToast("Erro ao desfazer.", "err"); return; }
-    showToast(sale.type === "remocao" ? "Remoção desfeita." : "Venda desfeita.");
+    showToast(sale.type === "venda" ? "Venda desfeita." : "Saída desfeita.");
     reload();
     loadSales();
   };
@@ -57,9 +57,8 @@ export default function SalesHistory({ theme, showToast }) {
           style={{ ...inputStyle(theme), maxWidth: 320 }}
         />
         <select className="toolbar-field" value={type} onChange={(e) => setType(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 200 }}>
-          <option value="all">Vendas e remoções</option>
-          <option value="venda">Só vendas</option>
-          <option value="remocao">Só remoções</option>
+          <option value="all">Todos os tipos</option>
+          {SALE_TYPES.map((t) => <option key={t.value} value={t.value}>Só {t.label.toLowerCase()}</option>)}
         </select>
       </div>
 
@@ -74,10 +73,10 @@ export default function SalesHistory({ theme, showToast }) {
         rows={rows}
         rowKey={(s) => s.id}
         minWidth={720}
-        empty={q || type !== "all" ? "Nenhum registro encontrado com esses filtros." : "Nenhuma venda ou remoção registrada ainda."}
+        empty={q || type !== "all" ? "Nenhum registro encontrado com esses filtros." : "Nenhuma venda ou saída registrada ainda."}
         columns={[
           { label: "", width: "44px", render: (s) => <Thumb theme={theme} images={productsById[s.product_id]?.image_urls} /> },
-          { label: "Tipo", width: "90px", render: (s) => <TypeBadge theme={theme} type={s.type} /> },
+          { label: "Tipo", width: "110px", render: (s) => <TypeBadge theme={theme} type={s.type} /> },
           {
             label: "Produto", width: "2fr", render: (s) => (
               <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -90,7 +89,7 @@ export default function SalesHistory({ theme, showToast }) {
           },
           { label: "Data", width: "95px", render: (s) => new Date(s.sold_at).toLocaleDateString("pt-BR") },
           { label: "Qtd", width: "55px", align: "right", render: (s) => `${s.qty}` },
-          { label: "Valor", width: "100px", align: "right", render: (s) => <strong>{s.type === "remocao" ? "—" : brl(s.total_price)}</strong> },
+          { label: "Valor", width: "100px", align: "right", render: (s) => <strong>{s.type !== "venda" ? "—" : brl(s.total_price)}</strong> },
           { label: "Observação", width: "1.4fr", render: (s) => <span style={{ color: theme.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</span> },
           {
             label: "", width: "40px", align: "right", render: (s) => (
@@ -107,7 +106,7 @@ export default function SalesHistory({ theme, showToast }) {
           theme={theme}
           title="Desfazer registro"
           confirmLabel="Desfazer"
-          message={`Desfazer ${undoTarget.type === "remocao" ? "essa remoção" : "essa venda"} de ${undoTarget.qty}x ${productLabel(productsById[undoTarget.product_id])}? A quantidade volta pro estoque.`}
+          message={`Desfazer ${undoTarget.type === "venda" ? "essa venda" : `essa saída (${saleTypeLabel(undoTarget.type).toLowerCase()})`} de ${undoTarget.qty}x ${productLabel(productsById[undoTarget.product_id])}? A quantidade volta pro estoque.`}
           onCancel={() => setUndoTarget(null)}
           onConfirm={() => handleUndo(undoTarget)}
         />
@@ -117,7 +116,7 @@ export default function SalesHistory({ theme, showToast }) {
 }
 
 function TypeBadge({ theme, type }) {
-  const isRemoval = type === "remocao";
+  const isRemoval = type !== "venda";
   return (
     <span
       style={{
@@ -126,7 +125,7 @@ function TypeBadge({ theme, type }) {
         color: isRemoval ? theme.textMuted : theme.good,
       }}
     >
-      {isRemoval ? "REMOVIDO" : "VENDA"}
+      {saleTypeLabel(type).toUpperCase()}
     </span>
   );
 }

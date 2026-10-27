@@ -117,6 +117,27 @@ export function Row({ theme, label, value, bold, tone, hint }) {
   );
 }
 
+/** Linhas finais do resumo de preço: sugerido, preço manual (quando houver, é o que vale) e lucro. */
+export function PriceSummaryRows({ theme, calc }) {
+  const profitTone = calc.belowCost ? theme.danger : theme.good;
+  return (
+    <>
+      <Row theme={theme} label="Preço sugerido" value={brl(calc.roundedPrice)} bold={!calc.hasOverride} tone={calc.hasOverride ? theme.textMuted : theme.primary}
+        hint="Custo total + margem (%) + taxa de cartão, arredondado pra terminar em ',90' se a opção estiver ligada em Configurações." />
+      {calc.hasOverride && (
+        <Row theme={theme} label="Preço de venda (manual)" value={brl(calc.finalPrice)} bold tone={theme.primary}
+          hint={calc.belowCost
+            ? "Atenção: abaixo do custo total — cada venda dá prejuízo."
+            : calc.belowSuggested
+              ? `Abaixo do sugerido — margem real de ${calc.realMarginPercent.toFixed(0)}%, menor que a margem configurada.`
+              : "É esse o preço usado no lucro, no estoque e nas vendas."} />
+      )}
+      <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={profitTone}
+        hint="Preço de venda − custo total. O % pode ficar acima da margem configurada por causa da taxa de cartão e do arredondamento." />
+    </>
+  );
+}
+
 export function Pagination({ theme, page, totalPages, onChange }) {
   if (totalPages <= 1) return null;
   const navBtn = (disabled) => ({

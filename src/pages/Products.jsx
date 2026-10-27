@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Copy, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Layers, Package } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, PriceSummaryRows } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
@@ -187,7 +187,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
               </div>
               <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} />
               <Row theme={theme} label="Preço de venda" value={brl(calc.finalPrice)} bold />
-              <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={theme.good} />
+              <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={calc.belowCost ? theme.danger : theme.good} />
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto", paddingTop: 12 }}>
                 <Button theme={theme} variant="soft" style={{ flex: 1, justifyContent: "center", height: 34 }} onClick={() => setDuplicateSource(product)}>
                   <Copy size={13} /> Duplicar
@@ -381,7 +381,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
         <div style={{ flex: "1 1 160px" }}>
           <Field
             label="Preço de venda manual (opcional)"
-            hint={calc.overrideIgnored ? `Ignorado: está abaixo do preço sugerido (${brl(calc.roundedPrice)}) — provavelmente ficou desatualizado depois de uma mudança de custo.` : undefined}
+            hint={`Se preenchido, é esse o preço que vale. Sugerido pela plataforma: ${brl(calc.roundedPrice)}.`}
           >
             <input type="number" step="0.01" style={inputStyle(theme)} value={form.sale_price_override ?? ""} onChange={(e) => set("sale_price_override", e.target.value === "" ? null : parseFloat(e.target.value))} />
           </Field>
@@ -400,10 +400,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
         <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
         <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold
           hint="Materiais + mão de obra + manutenção + rateio de despesas fixas." />
-        <Row theme={theme} label="Preço sugerido" value={brl(calc.finalPrice)} bold tone={theme.primary}
-          hint="Custo total + margem (%) + taxa de cartão, arredondado pra terminar em ',90' se a opção estiver ligada em Configurações." />
-        <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={theme.good}
-          hint="Preço final − custo total. O % pode ficar acima da margem configurada por causa da taxa de cartão e do arredondamento." />
+        <PriceSummaryRows theme={theme} calc={calc} />
       </Card>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>

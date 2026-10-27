@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, FileDown, FileText, ChevronRight, MessageCircle } from "lucide-react";
+import { Plus, Trash2, FileDown, FileText, ChevronRight, MessageCircle, Pencil, X } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Card, Button, Field, inputStyle, iconBtn, Row, Modal, Spinner } from "../components/ui.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, fetchQuotes } from "../data.js";
+import { useCatalogData, fetchQuotes, productLabel } from "../data.js";
 
 function fmtDate(d) {
   if (!d) return "";
@@ -104,7 +104,7 @@ function sendWhatsapp(quoteLike) {
 }
 
 export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
-  const { materials, products, settings, loading: loadingCatalog } = useCatalogData();
+  const { materials, products, allProducts, settings, loading: loadingCatalog } = useCatalogData();
   const [quotes, setQuotes] = useState([]);
   const [loadingQuotes, setLoadingQuotes] = useState(true);
   const [refreshingQuotes, setRefreshingQuotes] = useState(false);
@@ -117,6 +117,9 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
   const [items, setItems] = useState([]);
   const [saving, setSaving] = useState(false);
   const [detailQuote, setDetailQuote] = useState(null);
+  // orçamento salvo sendo editado (null = criando um novo)
+  const [editingQuote, setEditingQuote] = useState(null);
+  const formRef = useRef(null);
 
   const reloadQuotes = useCallback(async () => {
     if (loadedQuotesOnce.current) setRefreshingQuotes(true);
@@ -135,26 +138,47 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     return () => { cancelled = true; };
   }, [logoUrl]);
 
+  // allProducts: um orçamento antigo pode ter item de produto que já foi excluído.
   const productCosts = useMemo(
-    () => (settings ? products.map((p) => ({ product: p, calc: computeProductCost(p, materials, products, settings) })) : []),
-    [products, materials, settings]
+    () => (settings ? allProducts.map((p) => ({ product: p, calc: computeProductCost(p, materials, allProducts, settings) })) : []),
+    [allProducts, materials, settings]
   );
+  const priceOf = (productId) => productCosts.find((p) => p.product.id === productId)?.calc.finalPrice || 0;
 
-  const addItem = () => products.length && setItems([...items, { product_id: products[0].id, qty: 1 }]);
+  // cada item guarda o próprio unit_price: vem do preço do produto, mas pode ser
+  // ajustado (desconto/negociação) e, num orçamento salvo, mantém o valor combinado.
+  const addItem = () => products.length && setItems([...items, { product_id: products[0].id, qty: 1, unit_price: priceOf(products[0].id) }]);
   const updateItem = (idx, patch) => setItems(items.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  const changeItemProduct = (idx, productId) => updateItem(idx, { product_id: productId, unit_price: priceOf(productId), name: undefined });
   const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
 
   const rows = items.map((it) => {
     const found = productCosts.find((p) => p.product.id === it.product_id);
-    const unitPrice = found ? found.calc.finalPrice : 0;
-    return { ...it, name: found?.product.name || "", unitPrice, total: unitPrice * it.qty };
+    const unitPrice = it.unit_price ?? (found ? found.calc.finalPrice : 0);
+    return { ...it, name: found ? productLabel(found.product) : it.name || "(produto removido)", unitPrice, total: unitPrice * it.qty };
   });
+
+  const resetForm = () => {
+    setClientName(""); setClientContact(""); setValidUntil(""); setNotes(""); setItems([]);
+    setEditingQuote(null);
+  };
+
+  const startEdit = (q) => {
+    setClientName(q.client_name || "");
+    setClientContact(q.client_contact || "");
+    setValidUntil(q.valid_until ? String(q.valid_until).slice(0, 10) : "");
+    setNotes(q.notes || "");
+    setItems((q.items || []).map((it) => ({ product_id: it.product_id, qty: it.qty, unit_price: it.unit_price, name: it.name })));
+    setEditingQuote(q);
+    setDetailQuote(null);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const total = rows.reduce((s, r) => s + r.total, 0);
 
   const currentQuoteData = () => ({
     client_name: clientName,
     client_contact: clientContact,
-    created_at: Date.now(),
+    created_at: editingQuote?.created_at || Date.now(),
     valid_until: validUntil || null,
     notes,
     items: rows.map((r) => ({ product_id: r.product_id, name: r.name, qty: r.qty, unit_price: r.unitPrice })),
@@ -170,19 +194,21 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     if (!clientName.trim() || rows.length === 0) return;
     setSaving(true);
     const { data: userData } = await supabase.auth.getUser();
-    const { error } = await supabase.from("quotes").insert({
-      owner_id: userData.user.id,
+    const payload = {
       client_name: clientName,
       client_contact: clientContact,
       valid_until: validUntil || null,
       notes,
       items: rows.map((r) => ({ product_id: r.product_id, name: r.name, qty: r.qty, unit_price: r.unitPrice })),
       total,
-    });
+    };
+    const { error } = editingQuote
+      ? await supabase.from("quotes").update(payload).eq("id", editingQuote.id)
+      : await supabase.from("quotes").insert({ ...payload, owner_id: userData.user.id });
     setSaving(false);
     if (error) { showToast("Erro ao salvar orçamento.", "err"); return; }
-    setClientName(""); setClientContact(""); setValidUntil(""); setNotes(""); setItems([]);
-    showToast("Orçamento salvo.");
+    showToast(editingQuote ? "Orçamento atualizado." : "Orçamento salvo.");
+    resetForm();
     reloadQuotes();
   };
 
@@ -190,10 +216,14 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <Card theme={theme} style={{ padding: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div ref={formRef} />
+      <Card theme={theme} style={{ padding: 20, ...(editingQuote ? { border: `1.5px solid ${theme.primary}` } : {}) }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
           {logoUrl && <img src={logoUrl} alt="" style={{ height: 28, maxWidth: 90, objectFit: "contain" }} />}
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Novo orçamento</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{editingQuote ? `Editando orçamento — ${editingQuote.client_name}` : "Novo orçamento"}</div>
+          {editingQuote && (
+            <Button theme={theme} variant="ghost" onClick={resetForm} style={{ marginLeft: "auto", height: 30, fontSize: 12.5 }}><X size={13} /> Cancelar edição</Button>
+          )}
         </div>
         <div style={{ display: "flex", gap: 10, maxWidth: 780, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 220px" }}><Field label="Nome do cliente"><input style={inputStyle(theme)} value={clientName} onChange={(e) => setClientName(e.target.value)} /></Field></div>
@@ -204,14 +234,26 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
           <textarea rows={2} style={{ ...inputStyle(theme), resize: "vertical", maxWidth: 780, fontFamily: "inherit" }} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
 
+        {rows.length > 0 && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: theme.textMuted }}>
+            <span style={{ flex: 3 }}>Produto</span>
+            <span style={{ flex: 1 }}>Qtd</span>
+            <span style={{ flex: 1.3 }}>Preço unit.</span>
+            <span style={{ width: 84, textAlign: "right" }}>Subtotal</span>
+            <span style={{ width: 34 }} />
+          </div>
+        )}
         {rows.map((r, idx) => (
           <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-            <select style={{ ...inputStyle(theme), flex: 2 }} value={r.product_id} onChange={(e) => updateItem(idx, { product_id: e.target.value })}>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            <select style={{ ...inputStyle(theme), flex: 3, minWidth: 0 }} value={r.product_id} onChange={(e) => changeItemProduct(idx, e.target.value)}>
+              {!products.some((p) => p.id === r.product_id) && <option value={r.product_id}>{r.name}</option>}
+              {products.map((p) => <option key={p.id} value={p.id}>{productLabel(p)}</option>)}
             </select>
-            <input type="number" min={1} style={{ ...inputStyle(theme), flex: 1 }} value={r.qty} onChange={(e) => updateItem(idx, { qty: parseInt(e.target.value) || 1 })} />
-            <span style={{ fontSize: 12.5, width: 80, textAlign: "right" }}>{brl(r.total)}</span>
-            <button onClick={() => removeItem(idx)} style={iconBtn(theme)}><Trash2 size={13} /></button>
+            <input type="number" min={1} style={{ ...inputStyle(theme), flex: 1, minWidth: 0 }} value={r.qty} onChange={(e) => updateItem(idx, { qty: parseInt(e.target.value) || 1 })} />
+            <input type="number" step="0.01" min={0} style={{ ...inputStyle(theme), flex: 1.3, minWidth: 0 }} value={Math.round(r.unitPrice * 100) / 100}
+              onChange={(e) => updateItem(idx, { unit_price: parseFloat(e.target.value) || 0 })} title="Preço unitário — edite se deu desconto" />
+            <span style={{ fontSize: 12.5, width: 84, textAlign: "right" }}>{brl(r.total)}</span>
+            <button onClick={() => removeItem(idx)} style={iconBtn(theme)} title="Remover item"><Trash2 size={13} /></button>
           </div>
         ))}
         <Button theme={theme} variant="ghost" onClick={addItem} style={{ margin: "6px 0 16px" }}><Plus size={13} /> Adicionar produto</Button>
@@ -221,7 +263,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
         <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
           <Button theme={theme} variant="soft" onClick={generatePdf} disabled={!rows.length}><FileDown size={14} /> Baixar PDF</Button>
           <Button theme={theme} variant="soft" style={{ background: "#E7F7EE", color: "#1D8A4C" }} onClick={shareWhatsapp} disabled={!rows.length}><MessageCircle size={14} /> Enviar por WhatsApp</Button>
-          <Button theme={theme} onClick={saveQuote} disabled={saving || !rows.length}><FileText size={14} /> Salvar orçamento</Button>
+          <Button theme={theme} onClick={saveQuote} disabled={saving || !rows.length}><FileText size={14} /> {editingQuote ? "Salvar alterações" : "Salvar orçamento"}</Button>
         </div>
       </Card>
 
@@ -236,17 +278,20 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
           <>
             <div className="quotes-table-view" style={{ overflowX: "auto" }}>
               <div style={{ minWidth: 640 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1.2fr 1fr 0.7fr 1fr 60px", padding: "10px 20px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: theme.textMuted, background: theme.surfaceAlt, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1.2fr 1fr 0.7fr 1fr 80px", padding: "10px 20px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: theme.textMuted, background: theme.surfaceAlt, borderBottom: `1px solid ${theme.border}` }}>
                   <span>Cliente</span><span>Contato</span><span>Data</span><span>Itens</span><span>Total</span><span></span>
                 </div>
                 {quotes.map((q) => (
-                  <div key={q.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 1.2fr 1fr 0.7fr 1fr 60px", padding: "12px 20px", fontSize: 13.5, alignItems: "center", borderBottom: `1px solid ${theme.border}` }}>
+                  <div key={q.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 1.2fr 1fr 0.7fr 1fr 80px", padding: "12px 20px", fontSize: 13.5, alignItems: "center", borderBottom: `1px solid ${theme.border}` }}>
                     <span style={{ fontWeight: 600 }}>{q.client_name}</span>
                     <span style={{ color: theme.textMuted }}>{q.client_contact || "—"}</span>
                     <span style={{ color: theme.textMuted }}>{fmtDate(q.created_at)}</span>
                     <span style={{ color: theme.textMuted }}>{(q.items || []).length}</span>
                     <span style={{ fontWeight: 700 }}>{brl(q.total)}</span>
-                    <button onClick={() => setDetailQuote(q)} style={iconBtn(theme)} title="Ver detalhes"><ChevronRight size={14} /></button>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => startEdit(q)} style={iconBtn(theme)} title="Editar"><Pencil size={13} /></button>
+                      <button onClick={() => setDetailQuote(q)} style={iconBtn(theme)} title="Ver detalhes"><ChevronRight size={14} /></button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -273,13 +318,13 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
       </Card>
 
       {detailQuote && (
-        <QuoteDetailModal theme={theme} quote={{ ...detailQuote, ownerName, logo: logoAsset }} logoUrl={logoUrl} onClose={() => setDetailQuote(null)} />
+        <QuoteDetailModal theme={theme} quote={{ ...detailQuote, ownerName, logo: logoAsset }} logoUrl={logoUrl} onClose={() => setDetailQuote(null)} onEdit={() => startEdit(detailQuote)} />
       )}
     </div>
   );
 }
 
-function QuoteDetailModal({ theme, quote, logoUrl, onClose }) {
+function QuoteDetailModal({ theme, quote, logoUrl, onClose, onEdit }) {
   const items = quote.items || [];
   return (
     <Modal theme={theme} title={`Orçamento — ${quote.client_name}`} onClose={onClose} width={520}>
@@ -315,6 +360,7 @@ function QuoteDetailModal({ theme, quote, logoUrl, onClose }) {
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Fechar</Button>
+        <Button theme={theme} variant="soft" onClick={onEdit}><Pencil size={14} /> Editar</Button>
         <Button theme={theme} variant="soft" style={{ background: "#E7F7EE", color: "#1D8A4C" }} onClick={() => sendWhatsapp(quote)} disabled={!items.length}><MessageCircle size={14} /> WhatsApp</Button>
         <Button theme={theme} onClick={() => buildQuotePdf(quote)} disabled={!items.length}><FileDown size={14} /> Baixar PDF</Button>
       </div>

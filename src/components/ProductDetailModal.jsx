@@ -25,7 +25,8 @@ export default function ProductDetailModal({ theme, product, materials, products
       <div style={sectionTitle}>Valores</div>
       <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} />
       <Row theme={theme} label="Preço de venda" value={brl(calc.finalPrice)} bold />
-      <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={theme.good} />
+      {calc.hasOverride && <Row theme={theme} label="Preço sugerido pela plataforma" value={brl(calc.roundedPrice)} tone={theme.textMuted} />}
+      <Row theme={theme} label="Lucro / margem real" value={`${brl(calc.profit)} · ${calc.realMarginPercent.toFixed(0)}%`} tone={calc.belowCost ? theme.danger : theme.good} />
 
       {product.is_kit && (product.kitItems || []).length > 0 && (
         <>

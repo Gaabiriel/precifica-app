@@ -182,22 +182,36 @@ export function usesOldMaterial(product, materials) {
   return (product.bom || []).some((b) => materials.find((m) => m.id === b.material_id)?.is_old_material);
 }
 
-async function registerStockExit({ ownerId, product, qty, totalPrice, notes, type }) {
+/**
+ * Tipos de saída do estoque. Só "venda" tem valor cobrado e entra em
+ * faturamento/lucro; os demais só tiram a peça do estoque.
+ * "remocao" é o nome antigo no banco pra perda/defeito.
+ */
+export const SALE_TYPES = [
+  { value: "venda", label: "Venda" },
+  { value: "presente", label: "Presente" },
+  { value: "brinde", label: "Brinde" },
+  { value: "divulgacao", label: "Divulgação" },
+  { value: "remocao", label: "Perda/defeito" },
+];
+
+export function saleTypeLabel(type) {
+  return SALE_TYPES.find((t) => t.value === type)?.label || type;
+}
+
+/** Registra uma saída de estoque (venda, presente, brinde, divulgação ou perda) na data informada. */
+export async function registerStockExit({ ownerId, product, qty, totalPrice, notes, type, soldAt }) {
   const available = product.stock_qty || 0;
   if (qty > available) return { error: { message: `Só tem ${available} unidade(s) em estoque.` } };
 
-  const { error } = await supabase.from("sales").insert({ owner_id: ownerId, product_id: product.id, qty, total_price: totalPrice, type, notes: notes || null });
+  const { error } = await supabase.from("sales").insert({
+    owner_id: ownerId, product_id: product.id, qty, type, notes: notes || null,
+    total_price: type === "venda" ? totalPrice : 0,
+    ...(soldAt ? { sold_at: soldAt } : {}),
+  });
   if (error) return { error };
   await supabase.from("products").update({ stock_qty: available - qty, sold_count: (product.sold_count || 0) + qty }).eq("id", product.id);
   return { error: null };
-}
-
-export async function registerSale({ ownerId, product, qty, totalPrice, notes }) {
-  return registerStockExit({ ownerId, product, qty, totalPrice, notes, type: "venda" });
-}
-
-export async function removeFromStock({ ownerId, product, qty, notes }) {
-  return registerStockExit({ ownerId, product, qty, totalPrice: 0, notes, type: "remocao" });
 }
 
 export async function deleteSale(sale, product) {
