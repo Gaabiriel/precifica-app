@@ -117,37 +117,39 @@ export function Row({ theme, label, value, bold, tone, hint }) {
   );
 }
 
-/** Campo numérico pequeno, usado dentro das linhas do resumo de custos. Vazio = null (usa o padrão). */
+// Resumo de custos do cadastro: grade de 3 colunas (descrição | campo | valor),
+// todas as linhas com a mesma altura e separadas por uma linha fina.
+const COST_GRID = { display: "grid", gridTemplateColumns: "minmax(0,1fr) 104px 124px", alignItems: "center", columnGap: 14 };
+
+/** Campo numérico com a unidade dentro da caixa. Vazio = null (usa o padrão). */
 function InlineNumber({ theme, value, onChange, placeholder, prefix, suffix, step = "0.01" }) {
+  const custom = value != null;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: theme.textMuted }}>
-      {prefix}
+    <div style={{
+      display: "flex", alignItems: "center", height: 32, padding: "0 9px", borderRadius: 8, gap: 4,
+      border: `1px solid ${custom ? theme.primary : theme.border}`, background: theme.surface,
+    }}>
+      {prefix && <span style={{ fontSize: 12, color: theme.textMuted }}>{prefix}</span>}
       <input
         type="number" step={step} min={0} placeholder={placeholder}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : parseFloat(e.target.value))}
-        style={{
-          width: 68, height: 26, padding: "0 6px", borderRadius: 6, fontSize: 12.5, textAlign: "right",
-          border: `1px solid ${value != null ? theme.primary : theme.border}`, background: theme.surface, color: theme.text,
-        }}
+        style={{ flex: 1, minWidth: 0, width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 13.5, fontWeight: 600, textAlign: "right", color: theme.text, padding: 0 }}
       />
-      {suffix}
-    </span>
+      {suffix && <span style={{ fontSize: 12, color: theme.textMuted }}>{suffix}</span>}
+    </div>
   );
 }
 
-/** Linha do resumo com um campo editável à esquerda do valor. */
-function EditableRow({ theme, label, hint, input, value }) {
+function CostLine({ theme, label, hint, input, value, strong, tone, last }) {
   return (
-    <div style={{ padding: "3px 0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 13 }}>
-        <span style={{ color: theme.textMuted }}>{label}</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {input}
-          <span style={{ fontWeight: 600, color: theme.text, minWidth: 74, textAlign: "right" }}>{value}</span>
-        </span>
+    <div className="cost-line" style={{ ...COST_GRID, minHeight: 50, padding: "8px 0", borderBottom: last ? "none" : `1px solid ${theme.border}` }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: strong ? 700 : 500, color: theme.text }}>{label}</div>
+        {hint && <div className="cost-hint" style={{ fontSize: 11, color: theme.textMuted, marginTop: 2, lineHeight: 1.35 }}>{hint}</div>}
       </div>
-      {hint && <div style={{ fontSize: 10.5, color: theme.textMuted, opacity: 0.75, marginTop: 1, lineHeight: 1.3 }}>{hint}</div>}
+      <div>{input}</div>
+      <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 600, textAlign: "right", color: tone || theme.text, whiteSpace: "nowrap" }}>{value}</div>
     </div>
   );
 }
@@ -161,62 +163,59 @@ export function CostSummaryCard({ theme, calc, form, set, settings, isKit }) {
   const who = isKit ? "neste kit" : "neste produto";
   const marginAmount = calc.subtotal * (calc.margin / 100);
   const hasManual = calc.hasOverride;
-  const priceRow = (label, value, active, hint) => (
-    <div style={{ padding: "4px 0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: 13.5, fontWeight: active ? 700 : 500, color: active ? theme.text : theme.textMuted }}>{label}</span>
-        <span style={{ fontSize: active ? 19 : 15, fontWeight: 800, color: active ? theme.primary : theme.textMuted }}>{value}</span>
+
+  const priceLine = (label, hint, value, active, last) => (
+    <div className="cost-price-line" style={{ ...COST_GRID, gridTemplateColumns: "minmax(0,1fr) auto", minHeight: 54, padding: "8px 0", borderBottom: last ? "none" : `1px dashed ${theme.primary}55` }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: active ? theme.text : theme.textMuted }}>
+          {label}
+          {active && (
+            <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4, whiteSpace: "nowrap", padding: "2px 6px", borderRadius: 5, background: theme.primary, color: theme.surface }}>EM USO</span>
+          )}
+        </div>
+        <div className="cost-hint" style={{ fontSize: 11, color: theme.textMuted, marginTop: 2, lineHeight: 1.35 }}>{hint}</div>
       </div>
-      {hint && <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1, lineHeight: 1.3 }}>{hint}</div>}
+      <div style={{ fontSize: 18, fontWeight: 800, textAlign: "right", whiteSpace: "nowrap", color: active ? theme.primary : theme.textMuted }}>{value}</div>
     </div>
   );
 
   return (
-    <div style={{ background: theme.surfaceAlt, borderRadius: 12, padding: 14, marginTop: 4 }}>
+    <div style={{ background: theme.surfaceAlt, borderRadius: 12, padding: "6px 18px 16px", marginTop: 4 }}>
       {isKit ? (
-        <Row theme={theme} label="Custo dos produtos + materiais extras" value={brl(calc.materialsCost)}
-          hint="Soma do custo (não o preço de venda) de cada produto do kit, mais os materiais extras adicionados aqui — evita cobrar margem duas vezes." />
+        <CostLine theme={theme} label="Custo dos produtos + materiais extras" value={brl(calc.materialsCost)}
+          hint="Custo (não o preço) de cada produto do kit + materiais extras." />
       ) : (
         <>
-          <Row theme={theme} label="Custo de materiais / componentes" value={brl(calc.materialsCost)}
-            hint="Soma de cada material da ficha técnica: preço × quantidade usada, já com a % de perda de cada material." />
-          <Row theme={theme} label="Mão de obra" value={brl(calc.laborCost)}
-            hint="Tempo de produção (min) ÷ 60 × custo da hora de mão de obra (Configurações)." />
+          <CostLine theme={theme} label="Materiais / componentes" value={brl(calc.materialsCost)}
+            hint="Ficha técnica: preço × quantidade, com a % de perda." />
+          <CostLine theme={theme} label="Mão de obra" value={brl(calc.laborCost)}
+            hint="Tempo de produção × custo da hora (Configurações)." />
         </>
       )}
-      <EditableRow theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)}
+      <CostLine theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)}
         input={<InlineNumber theme={theme} step="0.1" suffix="%" placeholder={String(settings.maintenance_percent)}
           value={form.maintenance_percent_override} onChange={(v) => set("maintenance_percent_override", v)} />}
-        hint={calc.customMaintenance
-          ? `Personalizado ${who} (padrão: ${settings.maintenance_percent}%). Apague o campo pra voltar ao padrão.`
-          : `% sobre ${isKit ? "o custo dos produtos/materiais" : "(materiais + mão de obra)"}. Vazio = padrão das Configurações.`} />
-      <EditableRow theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)}
+        hint={calc.customMaintenance ? `Personalizado ${who} · padrão ${settings.maintenance_percent}%` : "Vazio = padrão das Configurações."} />
+      <CostLine theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)}
         input={<InlineNumber theme={theme} prefix="R$" placeholder={calc.defaultFixedExpenseShare.toFixed(2)}
           value={form.fixed_expense_share_override} onChange={(v) => set("fixed_expense_share_override", v)} />}
-        hint={calc.customFixedExpense
-          ? `Personalizado ${who} (padrão: ${brl(calc.defaultFixedExpenseShare)}). Apague o campo pra voltar ao padrão.`
-          : "Fatia das contas fixas do mês. Vazio = padrão das Configurações; pode diminuir ou zerar."} />
-
-      <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
-      <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold
-        hint={isKit ? "Custo dos produtos/materiais + manutenção + rateio de despesas fixas." : "Materiais + mão de obra + manutenção + rateio de despesas fixas."} />
-      <EditableRow theme={theme} label="Margem" value={`+ ${brl(marginAmount)}`}
+        hint={calc.customFixedExpense ? `Personalizado ${who} · padrão ${brl(calc.defaultFixedExpenseShare)}` : "Vazio = padrão das Configurações."} />
+      <CostLine theme={theme} label="Custo total" value={brl(calc.subtotal)} strong
+        hint={isKit ? "Produtos/materiais + manutenção + rateio." : "Materiais + mão de obra + manutenção + rateio."} />
+      <CostLine theme={theme} label="Margem" value={`+ ${brl(marginAmount)}`}
         input={<InlineNumber theme={theme} step="1" suffix="%" placeholder={String(settings.default_margin_percent)}
           value={form.margin_percent} onChange={(v) => set("margin_percent", v)} />}
-        hint={`Margem sobre o custo total, usada no preço sugerido. Vazio = padrão (${settings.default_margin_percent}%).`} />
-      <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={calc.belowCost ? theme.danger : theme.good}
-        hint="Preço de venda − custo total." />
+        hint={`Sobre o custo total · padrão ${settings.default_margin_percent}%`} />
+      <CostLine theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} last
+        tone={calc.belowCost ? theme.danger : theme.good} hint="Preço de venda − custo total." />
 
-      <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: theme.primarySoft, border: `1.5px solid ${theme.primary}` }}>
-        {priceRow("Preço sugerido", brl(calc.roundedPrice), !hasManual,
-          "Custo total + margem + taxa de cartão, arredondado pra terminar em ',90' se a opção estiver ligada em Configurações.")}
-        <div style={{ borderTop: `1px dashed ${theme.primary}55`, margin: "4px 0" }} />
-        {priceRow("Preço de venda (manual)", hasManual ? brl(calc.finalPrice) : "—", hasManual,
-          !hasManual
-            ? "Não definido — vale o preço sugerido."
-            : calc.belowCost
-              ? "Atenção: abaixo do custo total — cada venda dá prejuízo."
-              : "É esse o preço usado no lucro, no estoque e nas vendas.")}
+      <div style={{ marginTop: 10, padding: "4px 16px", borderRadius: 10, background: theme.primarySoft, border: `1.5px solid ${theme.primary}` }}>
+        {priceLine("Preço sugerido", "Custo + margem + taxa de cartão, arredondado (,90).", brl(calc.roundedPrice), !hasManual)}
+        {priceLine("Preço de venda (manual)",
+          !hasManual ? "Não definido — vale o preço sugerido."
+            : calc.belowCost ? "Atenção: abaixo do custo — cada venda dá prejuízo."
+              : "Usado no lucro, no estoque e nas vendas.",
+          hasManual ? brl(calc.finalPrice) : "—", hasManual, true)}
       </div>
     </div>
   );
