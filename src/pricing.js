@@ -57,11 +57,18 @@ export function computeProductCost(product, materials, products, settings) {
   }
 
   const laborCost = ((product.labor_minutes || 0) / 60) * settings.labor_cost_per_hour;
-  const fixedExpenseShare =
+  // Rateio e manutenção podem ser personalizados por produto (ex.: chaveiro,
+  // produto de entrada que não faz sentido pagar a mesma fatia das contas
+  // fixas que uma bolsa). Vazio (null) = usa o valor das Configurações.
+  const defaultFixedExpenseShare =
     settings.monthly_capacity_units > 0
       ? settings.monthly_fixed_expenses / settings.monthly_capacity_units
       : 0;
-  const maintenanceCost = (materialsCost + laborCost) * (settings.maintenance_percent / 100);
+  const customFixedExpense = product.fixed_expense_share_override != null;
+  const fixedExpenseShare = customFixedExpense ? Number(product.fixed_expense_share_override) : defaultFixedExpenseShare;
+  const customMaintenance = product.maintenance_percent_override != null;
+  const maintenancePercent = customMaintenance ? Number(product.maintenance_percent_override) : settings.maintenance_percent;
+  const maintenanceCost = (materialsCost + laborCost) * (maintenancePercent / 100);
   const subtotal = materialsCost + laborCost + fixedExpenseShare + maintenanceCost;
 
   const margin = product.margin_percent ?? settings.default_margin_percent;
@@ -81,6 +88,7 @@ export function computeProductCost(product, materials, products, settings) {
 
   return {
     lines, materialsCost, laborCost, fixedExpenseShare, maintenanceCost,
+    defaultFixedExpenseShare, customFixedExpense, maintenancePercent, customMaintenance,
     subtotal, margin, cardFee, suggestedPrice, roundedPrice, finalPrice,
     profit, realMarginPercent, hasOverride, belowSuggested, belowCost,
   };

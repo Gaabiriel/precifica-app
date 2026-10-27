@@ -128,13 +128,35 @@ export function PriceSummaryRows({ theme, calc }) {
         <Row theme={theme} label="Preço de venda (manual)" value={brl(calc.finalPrice)} bold tone={theme.primary}
           hint={calc.belowCost
             ? "Atenção: abaixo do custo total — cada venda dá prejuízo."
-            : calc.belowSuggested
-              ? `Abaixo do sugerido — margem real de ${calc.realMarginPercent.toFixed(0)}%, menor que a margem configurada.`
-              : "É esse o preço usado no lucro, no estoque e nas vendas."} />
+            : "É esse o preço usado no lucro, no estoque e nas vendas."} />
       )}
       <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={profitTone}
         hint="Preço de venda − custo total. O % pode ficar acima da margem configurada por causa da taxa de cartão e do arredondamento." />
     </>
+  );
+}
+
+/**
+ * Campos opcionais pra personalizar, só neste produto, o rateio de despesas
+ * fixas e a % de manutenção. Vazio = usa o valor das Configurações.
+ */
+export function CostOverrideFields({ theme, form, set, calc, settings }) {
+  const num = (v) => (v === "" ? null : parseFloat(v));
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ flex: "1 1 160px" }}>
+        <Field label="Rateio de despesas fixas (R$)" hint={`Vazio = padrão (${brl(calc.defaultFixedExpenseShare)}). Pode diminuir ou zerar neste produto.`}>
+          <input type="number" step="0.01" min={0} style={inputStyle(theme)} placeholder={calc.defaultFixedExpenseShare.toFixed(2)}
+            value={form.fixed_expense_share_override ?? ""} onChange={(e) => set("fixed_expense_share_override", num(e.target.value))} />
+        </Field>
+      </div>
+      <div style={{ flex: "1 1 160px" }}>
+        <Field label="Manutenção de equipamento (%)" hint={`Vazio = padrão (${settings.maintenance_percent}%). Pode diminuir ou zerar neste produto.`}>
+          <input type="number" step="0.1" min={0} style={inputStyle(theme)} placeholder={String(settings.maintenance_percent)}
+            value={form.maintenance_percent_override ?? ""} onChange={(e) => set("maintenance_percent_override", num(e.target.value))} />
+        </Field>
+      </div>
+    </div>
   );
 }
 

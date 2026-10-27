@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Copy, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Layers, Package } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, PriceSummaryRows } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, PriceSummaryRows, CostOverrideFields } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
@@ -387,6 +387,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
           </Field>
         </div>
       </div>
+      <CostOverrideFields theme={theme} form={form} set={set} calc={calc} settings={settings} />
 
       <Card theme={theme} style={{ padding: 14, background: theme.surfaceAlt, border: "none", marginTop: 4 }}>
         <Row theme={theme} label="Custo de materiais / componentes" value={brl(calc.materialsCost)}
@@ -394,9 +395,13 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
         <Row theme={theme} label="Mão de obra" value={brl(calc.laborCost)}
           hint="Tempo de produção (min) ÷ 60 × custo da hora de mão de obra (Configurações)." />
         <Row theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)}
-          hint="% de manutenção (Configurações) sobre (materiais + mão de obra) — cobre desgaste, energia, insumos difíceis de detalhar item a item." />
+          hint={calc.customMaintenance
+            ? `Personalizado neste produto: ${calc.maintenancePercent}% sobre (materiais + mão de obra).`
+            : "% de manutenção (Configurações) sobre (materiais + mão de obra) — cobre desgaste, energia, insumos difíceis de detalhar item a item."} />
         <Row theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)}
-          hint="Despesas fixas mensais ÷ produção mensal estimada (Configurações) — a fatia desse produto nas contas fixas do mês." />
+          hint={calc.customFixedExpense
+            ? `Personalizado neste produto (padrão: ${brl(calc.defaultFixedExpenseShare)}).`
+            : "Despesas fixas mensais ÷ produção mensal estimada (Configurações) — a fatia desse produto nas contas fixas do mês."} />
         <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
         <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold
           hint="Materiais + mão de obra + manutenção + rateio de despesas fixas." />

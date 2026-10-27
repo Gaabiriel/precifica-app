@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Copy } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, PriceSummaryRows } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, PriceSummaryRows, CostOverrideFields } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
@@ -376,15 +376,22 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
           </Field>
         </div>
       </div>
+      <CostOverrideFields theme={theme} form={form} set={set} calc={calc} settings={settings} />
 
       <Card theme={theme} style={{ padding: 14, background: theme.surfaceAlt, border: "none", marginTop: 4 }}>
         <Row theme={theme} label="Custo dos produtos + materiais extras" value={brl(calc.materialsCost)}
           hint="Soma do custo (não o preço de venda) de cada produto do kit, mais os materiais extras adicionados aqui — evita cobrar margem duas vezes." />
         <Row theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)}
-          hint="Despesas fixas mensais ÷ produção mensal estimada (Configurações) — a fatia desse kit nas contas fixas do mês." />
+          hint={calc.customFixedExpense
+            ? `Personalizado neste kit (padrão: ${brl(calc.defaultFixedExpenseShare)}).`
+            : "Despesas fixas mensais ÷ produção mensal estimada (Configurações) — a fatia desse kit nas contas fixas do mês."} />
+        <Row theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)}
+          hint={calc.customMaintenance
+            ? `Personalizado neste kit: ${calc.maintenancePercent}% sobre o custo dos produtos/materiais.`
+            : "% de manutenção (Configurações) sobre o custo dos produtos/materiais."} />
         <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
         <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold
-          hint="Custo dos produtos/materiais + rateio de despesas fixas." />
+          hint="Custo dos produtos/materiais + manutenção + rateio de despesas fixas." />
         <PriceSummaryRows theme={theme} calc={calc} />
       </Card>
 
