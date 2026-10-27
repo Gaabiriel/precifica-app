@@ -117,44 +117,106 @@ export function Row({ theme, label, value, bold, tone, hint }) {
   );
 }
 
-/** Linhas finais do resumo de preço: sugerido, preço manual (quando houver, é o que vale) e lucro. */
-export function PriceSummaryRows({ theme, calc }) {
-  const profitTone = calc.belowCost ? theme.danger : theme.good;
+/** Campo numérico pequeno, usado dentro das linhas do resumo de custos. Vazio = null (usa o padrão). */
+function InlineNumber({ theme, value, onChange, placeholder, prefix, suffix, step = "0.01" }) {
   return (
-    <>
-      <Row theme={theme} label="Preço sugerido" value={brl(calc.roundedPrice)} bold={!calc.hasOverride} tone={calc.hasOverride ? theme.textMuted : theme.primary}
-        hint="Custo total + margem (%) + taxa de cartão, arredondado pra terminar em ',90' se a opção estiver ligada em Configurações." />
-      {calc.hasOverride && (
-        <Row theme={theme} label="Preço de venda (manual)" value={brl(calc.finalPrice)} bold tone={theme.primary}
-          hint={calc.belowCost
-            ? "Atenção: abaixo do custo total — cada venda dá prejuízo."
-            : "É esse o preço usado no lucro, no estoque e nas vendas."} />
-      )}
-      <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={profitTone}
-        hint="Preço de venda − custo total. O % pode ficar acima da margem configurada por causa da taxa de cartão e do arredondamento." />
-    </>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: theme.textMuted }}>
+      {prefix}
+      <input
+        type="number" step={step} min={0} placeholder={placeholder}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? null : parseFloat(e.target.value))}
+        style={{
+          width: 68, height: 26, padding: "0 6px", borderRadius: 6, fontSize: 12.5, textAlign: "right",
+          border: `1px solid ${value != null ? theme.primary : theme.border}`, background: theme.surface, color: theme.text,
+        }}
+      />
+      {suffix}
+    </span>
+  );
+}
+
+/** Linha do resumo com um campo editável à esquerda do valor. */
+function EditableRow({ theme, label, hint, input, value }) {
+  return (
+    <div style={{ padding: "3px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 13 }}>
+        <span style={{ color: theme.textMuted }}>{label}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {input}
+          <span style={{ fontWeight: 600, color: theme.text, minWidth: 74, textAlign: "right" }}>{value}</span>
+        </span>
+      </div>
+      {hint && <div style={{ fontSize: 10.5, color: theme.textMuted, opacity: 0.75, marginTop: 1, lineHeight: 1.3 }}>{hint}</div>}
+    </div>
   );
 }
 
 /**
- * Campos opcionais pra personalizar, só neste produto, o rateio de despesas
- * fixas e a % de manutenção. Vazio = usa o valor das Configurações.
+ * Resumo de custos/preço do cadastro de produto ou kit. Margem, manutenção e
+ * rateio são editáveis direto aqui (vazio = padrão das Configurações); o
+ * preço sugerido e o preço manual ficam destacados no fim.
  */
-export function CostOverrideFields({ theme, form, set, calc, settings }) {
-  const num = (v) => (v === "" ? null : parseFloat(v));
-  return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-      <div style={{ flex: "1 1 160px" }}>
-        <Field label="Rateio de despesas fixas (R$)" hint={`Vazio = padrão (${brl(calc.defaultFixedExpenseShare)}). Pode diminuir ou zerar neste produto.`}>
-          <input type="number" step="0.01" min={0} style={inputStyle(theme)} placeholder={calc.defaultFixedExpenseShare.toFixed(2)}
-            value={form.fixed_expense_share_override ?? ""} onChange={(e) => set("fixed_expense_share_override", num(e.target.value))} />
-        </Field>
+export function CostSummaryCard({ theme, calc, form, set, settings, isKit }) {
+  const who = isKit ? "neste kit" : "neste produto";
+  const marginAmount = calc.subtotal * (calc.margin / 100);
+  const hasManual = calc.hasOverride;
+  const priceRow = (label, value, active, hint) => (
+    <div style={{ padding: "4px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 13.5, fontWeight: active ? 700 : 500, color: active ? theme.text : theme.textMuted }}>{label}</span>
+        <span style={{ fontSize: active ? 19 : 15, fontWeight: 800, color: active ? theme.primary : theme.textMuted }}>{value}</span>
       </div>
-      <div style={{ flex: "1 1 160px" }}>
-        <Field label="Manutenção de equipamento (%)" hint={`Vazio = padrão (${settings.maintenance_percent}%). Pode diminuir ou zerar neste produto.`}>
-          <input type="number" step="0.1" min={0} style={inputStyle(theme)} placeholder={String(settings.maintenance_percent)}
-            value={form.maintenance_percent_override ?? ""} onChange={(e) => set("maintenance_percent_override", num(e.target.value))} />
-        </Field>
+      {hint && <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1, lineHeight: 1.3 }}>{hint}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ background: theme.surfaceAlt, borderRadius: 12, padding: 14, marginTop: 4 }}>
+      {isKit ? (
+        <Row theme={theme} label="Custo dos produtos + materiais extras" value={brl(calc.materialsCost)}
+          hint="Soma do custo (não o preço de venda) de cada produto do kit, mais os materiais extras adicionados aqui — evita cobrar margem duas vezes." />
+      ) : (
+        <>
+          <Row theme={theme} label="Custo de materiais / componentes" value={brl(calc.materialsCost)}
+            hint="Soma de cada material da ficha técnica: preço × quantidade usada, já com a % de perda de cada material." />
+          <Row theme={theme} label="Mão de obra" value={brl(calc.laborCost)}
+            hint="Tempo de produção (min) ÷ 60 × custo da hora de mão de obra (Configurações)." />
+        </>
+      )}
+      <EditableRow theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)}
+        input={<InlineNumber theme={theme} step="0.1" suffix="%" placeholder={String(settings.maintenance_percent)}
+          value={form.maintenance_percent_override} onChange={(v) => set("maintenance_percent_override", v)} />}
+        hint={calc.customMaintenance
+          ? `Personalizado ${who} (padrão: ${settings.maintenance_percent}%). Apague o campo pra voltar ao padrão.`
+          : `% sobre ${isKit ? "o custo dos produtos/materiais" : "(materiais + mão de obra)"}. Vazio = padrão das Configurações.`} />
+      <EditableRow theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)}
+        input={<InlineNumber theme={theme} prefix="R$" placeholder={calc.defaultFixedExpenseShare.toFixed(2)}
+          value={form.fixed_expense_share_override} onChange={(v) => set("fixed_expense_share_override", v)} />}
+        hint={calc.customFixedExpense
+          ? `Personalizado ${who} (padrão: ${brl(calc.defaultFixedExpenseShare)}). Apague o campo pra voltar ao padrão.`
+          : "Fatia das contas fixas do mês. Vazio = padrão das Configurações; pode diminuir ou zerar."} />
+
+      <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
+      <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold
+        hint={isKit ? "Custo dos produtos/materiais + manutenção + rateio de despesas fixas." : "Materiais + mão de obra + manutenção + rateio de despesas fixas."} />
+      <EditableRow theme={theme} label="Margem" value={`+ ${brl(marginAmount)}`}
+        input={<InlineNumber theme={theme} step="1" suffix="%" placeholder={String(settings.default_margin_percent)}
+          value={form.margin_percent} onChange={(v) => set("margin_percent", v)} />}
+        hint={`Margem sobre o custo total, usada no preço sugerido. Vazio = padrão (${settings.default_margin_percent}%).`} />
+      <Row theme={theme} label="Lucro líquido estimado" value={`${brl(calc.profit)} (${calc.realMarginPercent.toFixed(0)}%)`} tone={calc.belowCost ? theme.danger : theme.good}
+        hint="Preço de venda − custo total." />
+
+      <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: theme.primarySoft, border: `1.5px solid ${theme.primary}` }}>
+        {priceRow("Preço sugerido", brl(calc.roundedPrice), !hasManual,
+          "Custo total + margem + taxa de cartão, arredondado pra terminar em ',90' se a opção estiver ligada em Configurações.")}
+        <div style={{ borderTop: `1px dashed ${theme.primary}55`, margin: "4px 0" }} />
+        {priceRow("Preço de venda (manual)", hasManual ? brl(calc.finalPrice) : "—", hasManual,
+          !hasManual
+            ? "Não definido — vale o preço sugerido."
+            : calc.belowCost
+              ? "Atenção: abaixo do custo total — cada venda dá prejuízo."
+              : "É esse o preço usado no lucro, no estoque e nas vendas.")}
       </div>
     </div>
   );

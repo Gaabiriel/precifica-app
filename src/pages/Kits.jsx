@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Copy } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, PriceSummaryRows, CostOverrideFields } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
@@ -361,39 +361,14 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
       })}
       <Button theme={theme} variant="ghost" onClick={addBomLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar material extra</Button>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 160px" }}>
-          <Field label="Margem (%)" hint={`Padrão: ${settings.default_margin_percent}%`}>
-            <input type="number" style={inputStyle(theme)} value={form.margin_percent ?? ""} onChange={(e) => set("margin_percent", e.target.value === "" ? null : parseFloat(e.target.value))} />
-          </Field>
-        </div>
-        <div style={{ flex: "1 1 160px" }}>
-          <Field
-            label="Preço de venda manual (opcional)"
-            hint={`Se preenchido, é esse o preço que vale. Sugerido pela plataforma: ${brl(calc.roundedPrice)}.`}
-          >
-            <input type="number" step="0.01" style={inputStyle(theme)} value={form.sale_price_override ?? ""} onChange={(e) => set("sale_price_override", e.target.value === "" ? null : parseFloat(e.target.value))} />
-          </Field>
-        </div>
-      </div>
-      <CostOverrideFields theme={theme} form={form} set={set} calc={calc} settings={settings} />
+      <Field
+        label="Preço de venda manual (opcional)"
+        hint={`Se preenchido, é esse o preço que vale. Sugerido pela plataforma: ${brl(calc.roundedPrice)}.`}
+      >
+        <input type="number" step="0.01" style={{ ...inputStyle(theme), maxWidth: 220 }} value={form.sale_price_override ?? ""} onChange={(e) => set("sale_price_override", e.target.value === "" ? null : parseFloat(e.target.value))} />
+      </Field>
 
-      <Card theme={theme} style={{ padding: 14, background: theme.surfaceAlt, border: "none", marginTop: 4 }}>
-        <Row theme={theme} label="Custo dos produtos + materiais extras" value={brl(calc.materialsCost)}
-          hint="Soma do custo (não o preço de venda) de cada produto do kit, mais os materiais extras adicionados aqui — evita cobrar margem duas vezes." />
-        <Row theme={theme} label="Rateio de despesas fixas" value={brl(calc.fixedExpenseShare)}
-          hint={calc.customFixedExpense
-            ? `Personalizado neste kit (padrão: ${brl(calc.defaultFixedExpenseShare)}).`
-            : "Despesas fixas mensais ÷ produção mensal estimada (Configurações) — a fatia desse kit nas contas fixas do mês."} />
-        <Row theme={theme} label="Manutenção de equipamento" value={brl(calc.maintenanceCost)}
-          hint={calc.customMaintenance
-            ? `Personalizado neste kit: ${calc.maintenancePercent}% sobre o custo dos produtos/materiais.`
-            : "% de manutenção (Configurações) sobre o custo dos produtos/materiais."} />
-        <div style={{ borderTop: `1px solid ${theme.border}`, margin: "6px 0" }} />
-        <Row theme={theme} label="Custo total" value={brl(calc.subtotal)} bold
-          hint="Custo dos produtos/materiais + manutenção + rateio de despesas fixas." />
-        <PriceSummaryRows theme={theme} calc={calc} />
-      </Card>
+      <CostSummaryCard theme={theme} calc={calc} form={form} set={set} settings={settings} isKit />
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
