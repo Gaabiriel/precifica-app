@@ -61,6 +61,16 @@ export async function fetchAllSales() {
 }
 
 
+/** Saídas sem venda (presente, brinde, divulgação, perda) desde a data — só informativo, não entra no lucro. */
+export async function fetchStockExitsSince(sinceDate) {
+  const { data } = await supabase
+    .from("sales")
+    .select("*")
+    .neq("type", "venda")
+    .gte("sold_at", sinceDate.toISOString());
+  return data || [];
+}
+
 export async function fetchSalesSince(sinceDate) {
   const { data } = await supabase
     .from("sales")
@@ -169,6 +179,69 @@ export async function deleteProduct(id) {
     }
   }
   return supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+}
+
+/**
+ * Materiais que saem do estoque ao colocar `units` peças prontas no estoque:
+ * quantidade da ficha técnica × unidades (sem a % de perda, que é só
+ * estimativa de custo). Materiais antigos ficam de fora.
+ */
+export function materialUsage(product, units, materials) {
+  if (!(units > 0)) return [];
+  const byId = Object.fromEntries(materials.map((m) => [m.id, m]));
+  const totals = new Map();
+  (product.bom || []).forEach((b) => {
+    const m = byId[b.material_id];
+    if (!m || m.is_old_material) return;
+    totals.set(m.id, (totals.get(m.id) || 0) + Number(b.qty) * units);
+  });
+  return [...totals].map(([id, qty]) => ({ material: byId[id], qty }));
+}
+
+/** Soma o uso de materiais de várias listas de `materialUsage`. */
+export function mergeUsage(lists) {
+  const totals = new Map();
+  lists.flat().forEach((u) => {
+    const cur = totals.get(u.material.id);
+    totals.set(u.material.id, { material: u.material, qty: (cur?.qty || 0) + u.qty });
+  });
+  return [...totals.values()];
+}
+
+/**
+ * Quantas unidades do produto ainda não tiveram os materiais descontados ao
+ * salvar com `newStock`. Produto novo: todo o estoque. Produto que já
+ * descontou (`materials_deducted`, ou que veio do antigo "Produzir"): só o
+ * que aumentou. Produto antigo que nunca descontou: o estoque inteiro.
+ */
+export function unitsToDeduct(original, newStock) {
+  const stock = Number(newStock) || 0;
+  if (!original?.id) return stock;
+  if (original.materials_deducted || Number(original.produced_count) > 0) {
+    return Math.max(0, stock - (Number(original.stock_qty) || 0));
+  }
+  return stock;
+}
+
+/** Tira do estoque de materiais o uso calculado (lê o estoque atual do banco antes). */
+export async function deductMaterials(usage) {
+  if (!usage.length) return { error: null };
+  const { data, error } = await supabase.from("materials").select("id, stock").in("id", usage.map((u) => u.material.id));
+  if (error) return { error };
+  for (const u of usage) {
+    const cur = (data || []).find((d) => d.id === u.material.id);
+    if (!cur) continue;
+    const stock = Math.round((Number(cur.stock) - u.qty) * 1000) / 1000;
+    const { error: updError } = await supabase.from("materials").update({ stock }).eq("id", cur.id);
+    if (updError) return { error: updError };
+  }
+  return { error: null };
+}
+
+/** Marca produtos como já tendo os materiais do estoque atual descontados. */
+export async function markMaterialsDeducted(productIds) {
+  if (!productIds.length) return { error: null };
+  return supabase.from("products").update({ materials_deducted: true }).in("id", productIds);
 }
 
 /** "Nome - Cor" quando o produto tem cor (variações duplicadas têm o mesmo nome). */

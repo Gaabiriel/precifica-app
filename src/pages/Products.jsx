@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Copy, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Layers, Package } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard, MaterialDeductionBox } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, saveProduct, deleteProduct, usesOldMaterial, productLabel } from "../data.js";
+import { useCatalogData, saveProduct, deleteProduct, usesOldMaterial, productLabel, materialUsage, unitsToDeduct, deductMaterials } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -38,10 +38,13 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
 
-  const handleSave = async (p) => {
+  // `usage` = materiais a descontar do estoque (vazio se não for descontar).
+  const handleSave = async (p, usage) => {
     const { error } = await saveProduct(ownerId, nicheId, p);
     if (error) { showToast("Erro ao salvar produto.", "err"); return; }
-    showToast("Produto salvo.");
+    const { error: deductError } = await deductMaterials(usage);
+    if (deductError) showToast("Produto salvo, mas deu erro ao descontar os materiais.", "err");
+    else showToast(usage.length ? "Produto salvo e materiais descontados." : "Produto salvo.");
     setModal(null);
     reload();
   };
@@ -55,12 +58,14 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
     showToast("Produto removido.");
     reload();
   };
-  const handleDuplicate = async (source, variant) => {
+  const handleDuplicate = async (source, variant, usage) => {
     if (atLimit) { setDuplicateSource(null); setShowLimitInfo(true); return; }
     const { id, created_at, updated_at, produced_count, sold_count, ...rest } = source;
     const { error } = await saveProduct(ownerId, nicheId, { ...rest, ...variant });
     if (error) { showToast("Erro ao duplicar produto.", "err"); return; }
-    showToast("Produto duplicado.");
+    const { error: deductError } = await deductMaterials(usage);
+    if (deductError) showToast("Produto duplicado, mas deu erro ao descontar os materiais.", "err");
+    else showToast(usage.length ? "Produto duplicado e materiais descontados." : "Produto duplicado.");
     setDuplicateSource(null);
     reload();
   };
@@ -218,7 +223,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
           onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {duplicateSource && (
-        <DuplicateModal theme={theme} source={duplicateSource} onClose={() => setDuplicateSource(null)} onConfirm={handleDuplicate} />
+        <DuplicateModal theme={theme} source={duplicateSource} materials={materials} onClose={() => setDuplicateSource(null)} onConfirm={handleDuplicate} />
       )}
       {viewTarget && (
         <ProductDetailModal theme={theme} product={viewTarget} materials={materials} products={products} settings={settings}
@@ -260,6 +265,10 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
   const [lightboxIdx, setLightboxIdx] = useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const calc = useMemo(() => computeProductCost(form, materials, products, settings), [form, materials, products, settings]);
+  const [deduct, setDeduct] = useState(true);
+  const deductUnits = unitsToDeduct(product, form.stock_qty);
+  const usage = useMemo(() => materialUsage(form, deductUnits, materials), [form, deductUnits, materials]);
+  const submit = () => form.name.trim() && onSave({ ...form, materials_deducted: true }, deduct ? usage : []);
 
   const uploadImages = async (fileList) => {
     const files = Array.from(fileList || []).slice(0, MAX_IMAGES - (form.image_urls || []).length);
@@ -372,6 +381,8 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
       })}
       <Button theme={theme} variant="ghost" onClick={addBomLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar material</Button>
 
+      <MaterialDeductionBox theme={theme} usage={usage} units={deductUnits} checked={deduct} onChange={setDeduct} />
+
       <Field
         label="Preço de venda manual (opcional)"
         hint={`Se preenchido, é esse o preço que vale. Sugerido pela plataforma: ${brl(calc.roundedPrice)}.`}
@@ -383,7 +394,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button theme={theme} onClick={() => form.name.trim() && onSave(form)}>Salvar produto</Button>
+        <Button theme={theme} onClick={submit}>Salvar produto</Button>
       </div>
 
       {detailMaterial && <MaterialDetailModal theme={theme} material={detailMaterial} onClose={() => setDetailMaterial(null)} />}
@@ -402,15 +413,17 @@ function OldTag({ theme }) {
   );
 }
 
-function DuplicateModal({ theme, source, onClose, onConfirm }) {
+function DuplicateModal({ theme, source, materials, onClose, onConfirm }) {
   const [color, setColor] = useState("");
   const [stockQty, setStockQty] = useState(0);
   const [mainMaterial, setMainMaterial] = useState(source.main_material || "");
+  const [deduct, setDeduct] = useState(true);
   const [saving, setSaving] = useState(false);
+  const usage = useMemo(() => materialUsage(source, stockQty, materials), [source, stockQty, materials]);
 
   const submit = async () => {
     setSaving(true);
-    await onConfirm(source, { color: color.trim(), stock_qty: stockQty, main_material: mainMaterial.trim() });
+    await onConfirm(source, { color: color.trim(), stock_qty: stockQty, main_material: mainMaterial.trim(), materials_deducted: true }, deduct ? usage : []);
     setSaving(false);
   };
 
@@ -428,6 +441,7 @@ function DuplicateModal({ theme, source, onClose, onConfirm }) {
       <Field label="Quantidade em estoque">
         <input type="number" min={0} style={inputStyle(theme)} value={stockQty} onChange={(e) => setStockQty(Math.max(0, parseFloat(e.target.value) || 0))} />
       </Field>
+      <MaterialDeductionBox theme={theme} usage={usage} units={stockQty} checked={deduct} onChange={setDeduct} />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button theme={theme} onClick={submit} disabled={saving}><Copy size={14} /> {saving ? "Duplicando…" : "Duplicar"}</Button>

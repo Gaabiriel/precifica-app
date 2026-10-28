@@ -129,7 +129,11 @@ export default function SalesHistory({ theme, showToast }) {
           },
           { label: "Data", width: "95px", render: (s) => new Date(s.sold_at).toLocaleDateString("pt-BR") },
           { label: "Qtd", width: "55px", align: "right", render: (s) => `${s.qty}` },
-          { label: "Valor", width: "100px", align: "right", render: (s) => <strong>{s.type !== "venda" ? "—" : brl(s.total_price)}</strong> },
+          {
+            label: "Valor", width: "100px", align: "right", render: (s) => s.type === "venda"
+              ? <strong>{brl(s.total_price)}</strong>
+              : <span style={{ color: theme.textMuted, fontStyle: "italic" }} title="Sem venda: mostra o custo das peças">{brl(costOf(s))}</span>,
+          },
           { label: "Custo", width: "100px", align: "right", render: (s) => <span style={{ color: theme.textMuted }}>{brl(costOf(s))}</span> },
           { label: "Observação", width: "1.4fr", render: (s) => <span style={{ color: theme.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</span> },
           {

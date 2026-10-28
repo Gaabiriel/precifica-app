@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Package, Wallet, Receipt, TrendingUp, PiggyBank } from "lucide-react";
+import { Package, Wallet, Receipt, TrendingUp, PiggyBank, Gift } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, StatCard, Row } from "../components/ui.jsx";
 import { brl, monthKey, computeProductCost } from "../pricing.js";
-import { useCatalogData, fetchSalesSince, fetchAllSales } from "../data.js";
+import { useCatalogData, fetchSalesSince, fetchAllSales, fetchStockExitsSince, SALE_TYPES } from "../data.js";
 
 const MONTHS_WINDOW = 6;
 
@@ -16,6 +16,7 @@ export default function Reports({ theme }) {
   // vendas antigas podem ser de produtos já excluídos — por isso usa allProducts.
   const { materials, allProducts: products, settings, loading: loadingCatalog } = useCatalogData();
   const [sales, setSales] = useState([]);
+  const [exits, setExits] = useState([]);
   const [loadingLog, setLoadingLog] = useState(true);
   const [allSales, setAllSales] = useState([]);
   const [loadingAllTime, setLoadingAllTime] = useState(true);
@@ -24,8 +25,9 @@ export default function Reports({ theme }) {
   useEffect(() => {
     const now = new Date();
     const since = new Date(now.getFullYear(), now.getMonth() - (MONTHS_WINDOW - 1), 1);
-    fetchSalesSince(since).then((rows) => {
+    Promise.all([fetchSalesSince(since), fetchStockExitsSince(since)]).then(([rows, exitRows]) => {
       setSales(rows);
+      setExits(exitRows);
       setLoadingLog(false);
     });
   }, []);
@@ -87,10 +89,10 @@ export default function Reports({ theme }) {
   }, [enriched]);
 
   const monthOptions = useMemo(() => {
-    const keys = new Set(enriched.map((r) => r.month));
+    const keys = new Set([...enriched.map((r) => r.month), ...exits.map((s) => monthKey(s.sold_at))]);
     keys.add(selectedMonth);
     return Array.from(keys).sort().reverse();
-  }, [enriched, selectedMonth]);
+  }, [enriched, exits, selectedMonth]);
 
   const monthRows = useMemo(() => enriched.filter((r) => r.month === selectedMonth), [enriched, selectedMonth]);
 
@@ -100,6 +102,21 @@ export default function Reports({ theme }) {
     cost: monthRows.reduce((s, r) => s + r.cost, 0),
     profit: monthRows.reduce((s, r) => s + r.profit, 0),
   }), [monthRows]);
+
+  // presentes, brindes etc. do mês: só o custo das peças, pra consulta — não entra no lucro
+  const monthExits = useMemo(() => {
+    if (!settings) return [];
+    const byType = new Map();
+    exits.filter((s) => monthKey(s.sold_at) === selectedMonth).forEach((s) => {
+      const product = productsById[s.product_id];
+      const cost = product ? computeProductCost(product, materials, products, settings).subtotal * s.qty : 0;
+      const cur = byType.get(s.type) || { type: s.type, units: 0, cost: 0 };
+      cur.units += Number(s.qty);
+      cur.cost += cost;
+      byType.set(s.type, cur);
+    });
+    return SALE_TYPES.map((t) => byType.get(t.value) && { ...byType.get(t.value), label: t.label }).filter(Boolean);
+  }, [exits, selectedMonth, productsById, materials, products, settings]);
 
   const topProducts = useMemo(() => {
     const map = new Map();
@@ -150,6 +167,26 @@ export default function Reports({ theme }) {
         <StatCard theme={theme} icon={Receipt} label="Custo do mês" value={brl(totals.cost)} />
         <StatCard theme={theme} icon={TrendingUp} label="Lucro do mês" value={brl(totals.profit)} tone={theme.good} />
       </div>
+
+      {monthExits.length > 0 && (
+        <Card theme={theme} style={{ padding: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <Gift size={16} color={theme.primary} />
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Saídas sem venda no mês</div>
+          </div>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12 }}>
+            Custo das peças que saíram como presente, brinde etc. Só pra consulta — não entra no custo nem no lucro acima.
+          </div>
+          <div style={{ maxWidth: 360 }}>
+            {monthExits.map((g) => (
+              <Row key={g.type} theme={theme} label={`${g.label} · ${g.units} un.`} value={brl(g.cost)} />
+            ))}
+            {monthExits.length > 1 && (
+              <Row theme={theme} label="Total" value={brl(monthExits.reduce((s, g) => s + g.cost, 0))} bold />
+            )}
+          </div>
+        </Card>
+      )}
 
       <Card theme={theme} style={{ padding: 20 }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Lucro x Receita — últimos 6 meses</div>

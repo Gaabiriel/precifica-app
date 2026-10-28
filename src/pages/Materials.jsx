@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, History, Upload, X, ImageOff, Lock } from "lucide-react";
+import { Plus, Pencil, Trash2, History, Upload, X, ImageOff, Lock, PackageMinus } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader, Spinner, Lightbox } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, UNIT_OPTIONS, Pagination, SortHeader, Spinner, Lightbox, MaterialUsageList } from "../components/ui.jsx";
 import { brl } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { fetchMaterials, fetchCategories, saveMaterial, deleteMaterial } from "../data.js";
+import {
+  fetchMaterials, fetchCategories, saveMaterial, deleteMaterial, fetchProductsFull, activeProducts,
+  productLabel, materialUsage, mergeUsage, deductMaterials, markMaterialsDeducted,
+} from "../data.js";
 
 const PAGE_SIZE = 10;
 const MAX_IMAGES = 5;
@@ -12,6 +15,8 @@ const MAX_IMAGES = 5;
 export default function Materials({ theme, ownerId, showToast, maxMaterials, autoOpenNew, onConsumeAutoOpen }) {
   const [materials, setMaterials] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [showPending, setShowPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const loadedOnce = useRef(false);
@@ -29,9 +34,10 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
 
   const reload = useCallback(async () => {
     if (loadedOnce.current) setRefreshing(true);
-    const [mats, cats] = await Promise.all([fetchMaterials(), fetchCategories()]);
+    const [mats, cats, prods] = await Promise.all([fetchMaterials(), fetchCategories(), fetchProductsFull()]);
     setMaterials(mats);
     setCategories(cats);
+    setProducts(activeProducts(prods));
     loadedOnce.current = true;
     setLoading(false);
     setRefreshing(false);
@@ -45,6 +51,26 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
   const categoryMap = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c.name])), [categories]);
 
   const oldCount = useMemo(() => materials.filter((m) => m.is_old_material).length, [materials]);
+
+  // produtos que já tinham estoque cadastrado antes do desconto automático de
+  // materiais e ainda não descontaram (e que usam algum material com estoque real)
+  const pendingProducts = useMemo(
+    () => products.filter((p) => !p.materials_deducted && (p.stock_qty || 0) > 0 && materialUsage(p, 1, materials).length > 0),
+    [products, materials]
+  );
+
+  const handlePending = async (selected, deduct) => {
+    if (deduct) {
+      const usage = mergeUsage(selected.map(({ product, units }) => materialUsage(product, units, materials)));
+      const { error } = await deductMaterials(usage);
+      if (error) { showToast("Erro ao descontar materiais.", "err"); return; }
+    }
+    const { error } = await markMaterialsDeducted(selected.map(({ product }) => product.id));
+    if (error) { showToast("Erro ao salvar.", "err"); return; }
+    showToast(deduct ? "Materiais descontados do estoque." : "Produtos marcados como já descontados.");
+    setShowPending(false);
+    reload();
+  };
 
   const handleSave = async (m) => {
     const { error } = await saveMaterial(ownerId, m);
@@ -119,6 +145,17 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
         </div>
       </div>
 
+      {pendingProducts.length > 0 && (
+        <Card theme={theme} style={{ padding: "12px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `1px solid ${theme.primary}` }}>
+          <PackageMinus size={18} color={theme.primary} />
+          <div style={{ flex: "1 1 260px", fontSize: 13, lineHeight: 1.5 }}>
+            <strong>{pendingProducts.length} {pendingProducts.length === 1 ? "produto já tinha" : "produtos já tinham"} estoque cadastrado</strong> sem descontar os materiais usados.
+            <span style={{ color: theme.textMuted }}> Revise e desconte pra deixar o estoque de materiais certo.</span>
+          </div>
+          <Button theme={theme} onClick={() => setShowPending(true)}>Revisar e descontar</Button>
+        </Card>
+      )}
+
       <Card theme={theme} className="materials-table-view" style={{ overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 110px", padding: "10px 16px", background: theme.surfaceAlt, borderBottom: `1px solid ${theme.border}` }}>
           <SortHeader theme={theme} label="Material" field="name" sort={sort} onSort={toggleSort} />
@@ -188,6 +225,10 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
       <Pagination theme={theme} page={currentPage} totalPages={totalPages} onChange={setPage} />
 
       {modal && <MaterialModal theme={theme} material={modal} categories={categories} onClose={() => setModal(null)} onSave={handleSave} />}
+      {showPending && (
+        <PendingDeductionModal theme={theme} products={pendingProducts} materials={materials}
+          onClose={() => setShowPending(false)} onConfirm={handlePending} />
+      )}
       {historyOf && <PriceHistoryModal theme={theme} material={historyOf} onClose={() => setHistoryOf(null)} />}
       {deleteTarget && (
         <ConfirmModal
@@ -368,6 +409,74 @@ function PriceHistoryModal({ theme, material, onClose }) {
           </LineChart>
         </ResponsiveContainer>
       )}
+    </Modal>
+  );
+}
+
+/**
+ * Desconto de materiais do estoque que já estava cadastrado nos produtos.
+ * Cada produto vem marcado com o estoque atual; dá pra desmarcar ou mudar a
+ * quantidade (ex.: peças antigas feitas com material que já não estava no estoque).
+ * Produtos que vieram do antigo "Produzir" já descontaram — vêm desmarcados.
+ */
+function PendingDeductionModal({ theme, products, materials, onClose, onConfirm }) {
+  const [rows, setRows] = useState(() => products.map((p) => ({
+    product: p, units: p.stock_qty || 0, checked: !(Number(p.produced_count) > 0),
+  })));
+  const [saving, setSaving] = useState(false);
+  const selected = rows.filter((r) => r.checked && r.units > 0);
+  const usage = useMemo(
+    () => mergeUsage(selected.map((r) => materialUsage(r.product, r.units, materials))),
+    [rows, materials]
+  );
+  const update = (idx, patch) => setRows((list) => list.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const run = async (deduct) => {
+    setSaving(true);
+    await onConfirm(deduct ? selected : rows.filter((r) => r.checked), deduct);
+    setSaving(false);
+  };
+
+  return (
+    <Modal theme={theme} title="Descontar materiais do estoque já cadastrado" onClose={onClose} width={560}>
+      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
+        Esses produtos já tinham peças em estoque antes do desconto automático. Marque os que devem descontar e
+        confira a quantidade de peças. Os que você desmarcar continuam nesta lista pra depois.
+      </div>
+      <div style={{ maxHeight: 260, overflowY: "auto", border: `1px solid ${theme.border}`, borderRadius: 10, marginBottom: 12 }}>
+        {rows.map((r, idx) => (
+          <div key={r.product.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderBottom: idx === rows.length - 1 ? "none" : `1px solid ${theme.border}` }}>
+            <input type="checkbox" checked={r.checked} onChange={(e) => update(idx, { checked: e.target.checked })} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{productLabel(r.product)}</div>
+              {Number(r.product.produced_count) > 0 && (
+                <div style={{ fontSize: 11, color: theme.textMuted }}>Feito pelo antigo "Produzir" — provavelmente já descontou.</div>
+              )}
+            </div>
+            <input type="number" min={0} max={r.product.stock_qty} value={r.units} disabled={!r.checked}
+              onChange={(e) => update(idx, { units: Math.max(0, Math.min(r.product.stock_qty || 0, parseFloat(e.target.value) || 0)) })}
+              style={{ ...inputStyle(theme), width: 70, height: 30, textAlign: "right" }} />
+            <span style={{ fontSize: 12, color: theme.textMuted, width: 52 }}>de {r.product.stock_qty} un.</span>
+          </div>
+        ))}
+      </div>
+      {usage.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: theme.textMuted, marginBottom: 6 }}>Vai sair do estoque</div>
+          <div style={{ background: theme.surfaceAlt, borderRadius: 10, padding: "10px 12px", marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
+            <MaterialUsageList theme={theme} usage={usage} />
+          </div>
+        </>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+        <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button theme={theme} variant="soft" onClick={() => run(false)} disabled={saving || !rows.some((r) => r.checked)}
+          title="Tira os marcados desta lista sem mexer no estoque de materiais">
+          Já estavam descontados
+        </Button>
+        <Button theme={theme} onClick={() => run(true)} disabled={saving || !selected.length}>
+          {saving ? "Descontando…" : "Descontar materiais"}
+        </Button>
+      </div>
     </Modal>
   );
 }

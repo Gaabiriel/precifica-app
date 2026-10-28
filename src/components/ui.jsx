@@ -221,6 +221,48 @@ export function CostSummaryCard({ theme, calc, form, set, settings, isKit }) {
   );
 }
 
+function fmtQty(n) {
+  return Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+}
+
+/** Lista "material — quanto sai · quanto fica" do desconto de materiais. */
+export function MaterialUsageList({ theme, usage }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {usage.map(({ material, qty }) => {
+        const after = Number(material.stock) - qty;
+        return (
+          <div key={material.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5 }}>
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{material.name}</span>
+            <span style={{ whiteSpace: "nowrap", color: after < 0 ? theme.danger : theme.textMuted }}>
+              − {fmtQty(qty)} {material.unit} · fica {fmtQty(after)} {material.unit}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Caixa do cadastro de produto/kit que mostra quanto de cada material vai
+ * sair do estoque ao salvar, com a opção de não descontar.
+ */
+export function MaterialDeductionBox({ theme, usage, units, checked, onChange }) {
+  if (!usage.length) return null;
+  return (
+    <div style={{ border: `1px solid ${checked ? theme.primary : theme.border}`, borderRadius: 10, padding: "10px 12px", margin: "0 0 14px", background: theme.surface }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: checked ? 8 : 0 }}>
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        Descontar materiais do estoque ({fmtQty(units)} un.)
+      </label>
+      {checked
+        ? <MaterialUsageList theme={theme} usage={usage} />
+        : <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>O estoque de materiais fica como está.</div>}
+    </div>
+  );
+}
+
 export function Pagination({ theme, page, totalPages, onChange }) {
   if (totalPages <= 1) return null;
   const navBtn = (disabled) => ({

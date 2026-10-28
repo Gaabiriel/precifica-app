@@ -143,6 +143,7 @@ create table public.products (
   fixed_expense_share_override numeric,     -- rateio de despesas fixas só deste produto (null = padrão das Configurações)
   maintenance_percent_override numeric,     -- % de manutenção só deste produto (null = padrão das Configurações)
   deleted_at timestamptz,                    -- exclusão lógica: preenchido = excluído (some das listagens, vendas antigas continuam apontando pra ele)
+  materials_deducted boolean not null default false,  -- os materiais do estoque atual já saíram do estoque de materiais
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
