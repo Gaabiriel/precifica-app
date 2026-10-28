@@ -263,6 +263,27 @@ export function MaterialDeductionBox({ theme, usage, units, checked, onChange })
   );
 }
 
+/** Opções do catálogo público no cadastro de produto/kit. */
+export function CatalogFields({ theme, form, set }) {
+  const shown = !!form.show_in_catalog;
+  const label = { display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" };
+  return (
+    <div style={{ border: `1px solid ${shown ? theme.primary : theme.border}`, borderRadius: 10, padding: "10px 12px", margin: "0 0 14px", background: theme.surface }}>
+      <label style={{ ...label, fontWeight: 600 }}>
+        <input type="checkbox" checked={shown} onChange={(e) => set("show_in_catalog", e.target.checked)} />
+        Mostrar no catálogo online
+      </label>
+      {shown && (
+        <label style={{ ...label, marginTop: 8, marginLeft: 24 }}>
+          <input type="checkbox" checked={form.catalog_show_price !== false} onChange={(e) => set("catalog_show_price", e.target.checked)} />
+          Mostrar o preço
+          <span style={{ fontSize: 12, color: theme.textMuted }}>(desmarcado = "preço sob consulta")</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
 export function Pagination({ theme, page, totalPages, onChange }) {
   if (totalPages <= 1) return null;
   const navBtn = (disabled) => ({

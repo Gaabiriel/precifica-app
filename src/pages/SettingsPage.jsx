@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Save, Upload, X, Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { Save, Upload, X, Plus, Pencil, Trash2, Tag, Store, Copy, ExternalLink } from "lucide-react";
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, Spinner } from "../components/ui.jsx";
-import { fetchSettings, saveSettingsRow, updateProfileLogo, fetchCategories, saveCategory, deleteCategory } from "../data.js";
+import {
+  fetchSettings, saveSettingsRow, updateProfileLogo, fetchCategories, saveCategory, deleteCategory,
+  syncCatalogPrices, catalogUrl, slugify, normalizeWhatsapp,
+} from "../data.js";
 import { supabase } from "../supabaseClient";
 
-export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoUrl, onLogoChange }) {
+export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoUrl, onLogoChange, storeName }) {
   const [settings, setSettings] = useState(null);
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,10 +24,18 @@ export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoU
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
+    if (form.catalog_enabled && (!form.catalog_slug || !form.catalog_whatsapp)) {
+      showToast("Pra ligar o catálogo, preencha o endereço e o WhatsApp.", "err");
+      return;
+    }
     const { error } = await saveSettingsRow(ownerId, form);
-    if (error) { showToast("Erro ao salvar configurações.", "err"); return; }
+    if (error) {
+      showToast(error.code === "23505" ? "Esse endereço de catálogo já está em uso. Escolha outro." : "Erro ao salvar configurações.", "err");
+      return;
+    }
     setSettings(form);
     showToast("Configurações salvas.");
+    syncCatalogPrices();
   };
 
   const uploadLogo = async (fileList) => {
@@ -109,6 +120,8 @@ export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoU
           <Button theme={theme} onClick={handleSave} style={{ opacity: dirty ? 1 : 0.5 }}><Save size={14} /> Salvar configurações</Button>
         </div>
       </Card>
+
+      <CatalogCard theme={theme} form={form} set={set} dirty={dirty} onSave={handleSave} storeName={storeName} showToast={showToast} />
 
       <div style={{ marginTop: 20 }}>
         <CategoriesCard theme={theme} nicheId={nicheId} showToast={showToast} />
@@ -221,5 +234,65 @@ function CategoryModal({ theme, category, onClose, onSave }) {
         <Button theme={theme} onClick={() => name.trim() && onSave({ id: category.id, name: name.trim() })}>Salvar</Button>
       </div>
     </Modal>
+  );
+}
+
+function CatalogCard({ theme, form, set, dirty, onSave, storeName, showToast }) {
+  const savedSlug = form.catalog_slug;
+  const url = savedSlug ? catalogUrl(savedSlug) : "";
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); showToast("Link copiado."); }
+    catch { showToast("Não deu pra copiar — selecione o link e copie.", "err"); }
+  };
+  const label = { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer" };
+
+  return (
+    <Card theme={theme} style={{ padding: 24, marginTop: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <Store size={16} color={theme.primary} />
+        <div style={{ fontSize: 16, fontWeight: 800 }}>Catálogo online</div>
+      </div>
+      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+        Um link pra mandar pros clientes com os produtos que você escolher (em cada produto: "Mostrar no catálogo online").
+        O cliente monta a lista e pede orçamento direto no seu WhatsApp. Custos e margens nunca aparecem.
+      </div>
+
+      <label style={{ ...label, marginBottom: 14, fontWeight: 600 }}>
+        <input type="checkbox" checked={!!form.catalog_enabled} onChange={(e) => {
+          set("catalog_enabled", e.target.checked);
+          if (e.target.checked && !form.catalog_slug) set("catalog_slug", slugify(storeName));
+        }} />
+        Catálogo ligado
+      </label>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "4px 20px" }}>
+        <Field label="Endereço do catálogo" hint="Só letras, números e hífen. Ex: atelie-maria">
+          <input style={inputStyle(theme)} value={form.catalog_slug || ""} onChange={(e) => set("catalog_slug", slugify(e.target.value) || null)} placeholder="atelie-maria" />
+        </Field>
+        <Field label="WhatsApp que recebe os pedidos" hint="Com DDD. Ex: (11) 98765-4321">
+          <input style={inputStyle(theme)} inputMode="tel" value={form.catalog_whatsapp || ""} onChange={(e) => set("catalog_whatsapp", normalizeWhatsapp(e.target.value) || null)} placeholder="11987654321" />
+        </Field>
+      </div>
+
+      {form.catalog_enabled && url && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: 10, background: theme.surfaceAlt, margin: "6px 0 4px" }}>
+          <span style={{ fontSize: 13, fontWeight: 600, flex: "1 1 220px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{url}</span>
+          {dirty ? (
+            <span style={{ fontSize: 12, color: theme.textMuted }}>Salve pra o link funcionar.</span>
+          ) : (
+            <>
+              <Button theme={theme} variant="ghost" onClick={copy}><Copy size={14} /> Copiar</Button>
+              <a href={url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <Button theme={theme} variant="soft"><ExternalLink size={14} /> Abrir</Button>
+              </a>
+            </>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+        <Button theme={theme} onClick={onSave} style={{ opacity: dirty ? 1 : 0.5 }}><Save size={14} /> Salvar configurações</Button>
+      </div>
+    </Card>
   );
 }

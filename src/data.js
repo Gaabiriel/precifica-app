@@ -3,6 +3,7 @@
 // globalmente no login).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
+import { computeProductCost } from "./pricing.js";
 
 /* -------------------- BUSCAS -------------------- */
 
@@ -331,6 +332,48 @@ export async function saveSettingsRow(ownerId, s) {
 
 export async function updateProfileLogo(ownerId, logoUrl) {
   return supabase.from("profiles").update({ logo_url: logoUrl }).eq("id", ownerId);
+}
+
+/* -------------------- CATÁLOGO PÚBLICO -------------------- */
+
+/** Link público do catálogo do vendedor. */
+export function catalogUrl(slug) {
+  return `${window.location.origin}/?catalogo=${encodeURIComponent(slug)}`;
+}
+
+/** Endereço do catálogo: minúsculas, sem acento, só letras/números/hífen. */
+export function slugify(text) {
+  return (text || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+}
+
+/** WhatsApp só com dígitos; número brasileiro sem DDI ganha o 55. */
+export function normalizeWhatsapp(text) {
+  const digits = (text || "").replace(/\D/g, "");
+  return digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
+}
+
+/** Catálogo público (sem login) — só os campos liberados pela função do banco. */
+export async function fetchPublicCatalog(slug) {
+  const { data, error } = await supabase.rpc("get_public_catalog", { p_slug: slug });
+  return { data, error };
+}
+
+/**
+ * O preço de venda é calculado no navegador (materiais + mão de obra +
+ * margem…), mas o catálogo público só lê o banco — então grava o preço atual
+ * em `catalog_price` dos produtos do catálogo. Chamado depois de salvar
+ * produto, kit, material ou configurações (qualquer coisa que mude preço).
+ */
+export async function syncCatalogPrices() {
+  const [materials, products, settings] = await Promise.all([fetchMaterials(), fetchProductsFull(), fetchSettings()]);
+  if (!settings) return;
+  const changed = activeProducts(products)
+    .filter((p) => p.show_in_catalog)
+    .map((p) => ({ id: p.id, old: p.catalog_price, price: Math.round(computeProductCost(p, materials, products, settings).finalPrice * 100) / 100 }))
+    .filter((r) => r.old == null || Number(r.old) !== r.price);
+  await Promise.all(changed.map((r) => supabase.from("products").update({ catalog_price: r.price }).eq("id", r.id)));
 }
 
 export async function fetchReminders() {

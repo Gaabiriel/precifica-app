@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Copy } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard, MaterialDeductionBox } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard, MaterialDeductionBox, CatalogFields } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, saveProduct, deleteProduct, productLabel, materialUsage, unitsToDeduct, deductMaterials } from "../data.js";
+import { useCatalogData, saveProduct, deleteProduct, productLabel, materialUsage, unitsToDeduct, deductMaterials, syncCatalogPrices } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -42,6 +42,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
     if (deductError) showToast("Kit salvo, mas deu erro ao descontar os materiais.", "err");
     else showToast(usage.length ? "Kit salvo e materiais descontados." : "Kit salvo.");
     setModal(null);
+    await syncCatalogPrices();
     reload();
   };
   const handleDelete = async (id) => {
@@ -63,6 +64,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
     if (deductError) showToast("Kit duplicado, mas deu erro ao descontar os materiais.", "err");
     else showToast(usage.length ? "Kit duplicado e materiais descontados." : "Kit duplicado.");
     setDuplicateSource(null);
+    await syncCatalogPrices();
     reload();
   };
 
@@ -234,6 +236,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
 function KitModal({ theme, kit, materials, products, settings, onClose, onSave }) {
   const [form, setForm] = useState({
     name: "", image_urls: [], labor_minutes: 0, dimensions: "", is_kit: true, stock_qty: 0, color: "",
+    show_in_catalog: false, catalog_show_price: true,
     bom: [], kitItems: [], margin_percent: settings.default_margin_percent, sale_price_override: null,
     ...kit,
     is_kit: true,
@@ -372,6 +375,7 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
       <Button theme={theme} variant="ghost" onClick={addBomLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar material extra</Button>
 
       <MaterialDeductionBox theme={theme} usage={usage} units={deductUnits} checked={deduct} onChange={setDeduct} />
+      <CatalogFields theme={theme} form={form} set={set} />
 
       <Field
         label="Preço de venda manual (opcional)"

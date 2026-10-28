@@ -232,6 +232,7 @@ export default function App() {
               nicheId={nicheId}
               showToast={showToast}
               logoUrl={profile.logo_url}
+              storeName={profile.full_name}
               onLogoChange={(url) => setProfile((p) => ({ ...p, logo_url: url }))}
             />
           )}

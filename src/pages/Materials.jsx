@@ -6,7 +6,7 @@ import { brl } from "../pricing.js";
 import { supabase } from "../supabaseClient";
 import {
   fetchMaterials, fetchCategories, saveMaterial, deleteMaterial, fetchProductsFull, activeProducts,
-  productLabel, materialUsage, mergeUsage, deductMaterials, markMaterialsDeducted,
+  productLabel, materialUsage, mergeUsage, deductMaterials, markMaterialsDeducted, syncCatalogPrices,
 } from "../data.js";
 
 const PAGE_SIZE = 10;
@@ -77,6 +77,7 @@ export default function Materials({ theme, ownerId, showToast, maxMaterials, aut
     if (error) { showToast("Erro ao salvar material.", "err"); return; }
     showToast("Material salvo.");
     setModal(null);
+    syncCatalogPrices();
     reload();
   };
   const handleDelete = async (id) => {

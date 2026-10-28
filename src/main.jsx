@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
+import PublicCatalog from "./pages/PublicCatalog.jsx";
 
 // PWA/service worker desativado por enquanto: estava servindo telas antigas
 // em cache (inclusive o HTML) e mascarando mudanças de verdade durante o
@@ -12,8 +13,13 @@ if ("serviceWorker" in navigator) {
   if (window.caches) caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
 }
 
+// ?catalogo=<endereço> abre o catálogo público do vendedor (sem login).
+// Usa parâmetro em vez de caminho (/c/...) pra funcionar em qualquer
+// hospedagem sem precisar configurar redirecionamento.
+const catalogSlug = new URLSearchParams(window.location.search).get("catalogo");
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    {catalogSlug ? <PublicCatalog slug={catalogSlug} /> : <App />}
   </React.StrictMode>
 );

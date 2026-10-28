@@ -60,6 +60,9 @@ create table public.settings (
   round_to_90 boolean not null default true,
   initial_investment numeric not null default 0,  -- equipamentos, softwares, estoque inicial etc.; usado no acompanhamento de retorno em Relatórios
   dashboard_widgets jsonb,  -- array de ids de widget, na ordem escolhida pelo usuário; null = padrão
+  catalog_enabled boolean not null default false,  -- catálogo público ligado
+  catalog_slug text,                 -- endereço do catálogo (?catalogo=<slug>); índice único em lower()
+  catalog_whatsapp text,             -- WhatsApp que recebe os pedidos de orçamento (só dígitos, com 55)
   updated_at timestamptz not null default now()
 );
 
@@ -144,6 +147,9 @@ create table public.products (
   maintenance_percent_override numeric,     -- % de manutenção só deste produto (null = padrão das Configurações)
   deleted_at timestamptz,                    -- exclusão lógica: preenchido = excluído (some das listagens, vendas antigas continuam apontando pra ele)
   materials_deducted boolean not null default false,  -- os materiais do estoque atual já saíram do estoque de materiais
+  show_in_catalog boolean not null default false,   -- aparece no catálogo público
+  catalog_show_price boolean not null default true,  -- false = "preço sob consulta" no catálogo
+  catalog_price numeric,                             -- preço de venda gravado pelo app pro catálogo (o cálculo é feito no navegador)
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
