@@ -95,7 +95,7 @@ export default function PublicCatalog({ slug }) {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 230px), 1fr))", gap: 16 }}>
           {filtered.map((p) => (
             <ProductCard key={p.id} theme={theme} product={p} qty={cart[p.id] || 0} onQty={(n) => setQty(p.id, n)} />
           ))}
@@ -130,13 +130,13 @@ export default function PublicCatalog({ slug }) {
 function PriceTag({ theme, product, size = 17 }) {
   return product.price != null
     ? <span style={{ fontSize: size, fontWeight: 800, color: theme.primary }}>{brl(product.price)}</span>
-    : <span style={{ fontSize: 12, fontWeight: 600, color: theme.textMuted }}>Preço sob consulta</span>;
+    : <span style={{ fontSize: 13, fontWeight: 600, color: theme.textMuted }}>Preço sob consulta</span>;
 }
 
 function QtyStepper({ theme, qty, onQty }) {
   const btn = { width: 32, height: 32, borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 };
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <button type="button" onClick={() => onQty(qty - 1)} style={btn} aria-label="Diminuir"><Minus size={14} /></button>
       <span style={{ minWidth: 20, textAlign: "center", fontWeight: 700, fontSize: 14 }}>{qty}</span>
       <button type="button" onClick={() => onQty(qty + 1)} style={btn} aria-label="Aumentar"><Plus size={14} /></button>
@@ -146,24 +146,24 @@ function QtyStepper({ theme, qty, onQty }) {
 
 function ProductCard({ theme, product, qty, onQty }) {
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${qty ? theme.primary : theme.border}`, borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: 6 }}>
-        <Carousel theme={theme} images={product.image_urls} height={150} />
+    <div style={{ background: theme.surface, border: `1px solid ${qty ? theme.primary : theme.border}`, borderRadius: 12, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: 8 }}>
+        <Carousel theme={theme} images={product.image_urls} height={210} />
       </div>
-      <div style={{ padding: "2px 10px 10px", display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-        <div style={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3 }}>{productLabel(product)}</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11.5, color: theme.textMuted }}>
+      <div style={{ padding: "4px 14px 14px", display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.3 }}>{productLabel(product)}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12.5, color: theme.textMuted }}>
           {product.main_material && <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Layers size={12} /> {product.main_material}</span>}
           {product.dimensions && <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Ruler size={12} /> {product.dimensions}</span>}
         </div>
         {product.in_stock && (
-          <span style={{ alignSelf: "flex-start", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4, padding: "2px 6px", borderRadius: 5, background: theme.primarySoft, color: theme.primary }}>PRONTA ENTREGA</span>
+          <span style={{ alignSelf: "flex-start", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, padding: "3px 7px", borderRadius: 5, background: theme.primarySoft, color: theme.primary }}>PRONTA ENTREGA</span>
         )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: "auto", paddingTop: 6 }}>
-          <PriceTag theme={theme} product={product} size={15} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: "auto", paddingTop: 8 }}>
+          <PriceTag theme={theme} product={product} />
           {qty > 0
             ? <QtyStepper theme={theme} qty={qty} onQty={onQty} />
-            : <Button theme={theme} variant="soft" onClick={() => onQty(1)} style={{ height: 32, justifyContent: "center", fontSize: 12.5 }}><Plus size={13} /> Quero</Button>}
+            : <Button theme={theme} variant="soft" onClick={() => onQty(1)} style={{ height: 34 }}><Plus size={14} /> Quero</Button>}
         </div>
       </div>
     </div>
