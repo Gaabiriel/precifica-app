@@ -80,10 +80,17 @@ export default function PublicCatalog({ slug }) {
           {store.logo_url && (
             <img src={store.logo_url} alt="" style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover", border: `1px solid ${theme.border}`, flexShrink: 0 }} />
           )}
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, lineHeight: 1.2 }}>{store.name || "Catálogo"}</div>
             <div style={{ fontSize: 12, color: theme.textMuted }}>Escolha os produtos e peça seu orçamento pelo WhatsApp</div>
           </div>
+          <button type="button" onClick={() => setShowCart(true)} aria-label="Ver carrinho" title="Ver carrinho"
+            style={{ position: "relative", width: 42, height: 42, borderRadius: "50%", border: `1px solid ${theme.border}`, background: theme.surface, color: theme.primary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, padding: 0 }}>
+            <ShoppingBag size={19} />
+            {cartCount > 0 && (
+              <span style={{ position: "absolute", top: -4, right: -4, minWidth: 19, height: 19, padding: "0 5px", borderRadius: 10, background: theme.primary, color: "#fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{cartCount}</span>
+            )}
+          </button>
         </div>
       </header>
 
@@ -112,9 +119,11 @@ export default function PublicCatalog({ slug }) {
       {cartCount > 0 && (
         <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, padding: "12px 16px", background: theme.surface, borderTop: `1px solid ${theme.border}`, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>
           <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700 }}>
+            <button type="button" onClick={() => setShowCart(true)}
+              style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, border: "none", background: "transparent", color: theme.text, cursor: "pointer", padding: "6px 0", fontFamily: "inherit" }}>
               <ShoppingBag size={18} color={theme.primary} /> {cartCount} {cartCount === 1 ? "item" : "itens"}
-            </div>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.primary, textDecoration: "underline" }}>ver</span>
+            </button>
             <Button theme={theme} onClick={() => setShowCart(true)}><MessageCircle size={15} /> Pedir orçamento</Button>
           </div>
         </div>
@@ -189,15 +198,15 @@ function CartModal({ theme, store, items, onQty, onClose }) {
   };
 
   return (
-    <Modal theme={theme} title="Seu pedido de orçamento" onClose={onClose} width={460}>
-      {items.length === 0 && <div style={{ fontSize: 13.5, color: theme.textMuted, marginBottom: 12 }}>Nenhum item na lista.</div>}
+    <Modal theme={theme} title="Seu carrinho" onClose={onClose} width={460}>
+      {items.length === 0 && <div style={{ fontSize: 13.5, color: theme.textMuted, marginBottom: 12 }}>Seu carrinho está vazio. Toque em "Quero" nos produtos pra adicionar.</div>}
       {items.map(({ product, qty }) => (
         <div key={product.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${theme.border}` }}>
           <div style={{ width: 48, height: 48, borderRadius: 8, overflow: "hidden", background: theme.surfaceAlt, flexShrink: 0 }}>
             {product.image_urls?.[0] && <img src={product.image_urls[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{productLabel(product)}</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.3 }}>{productLabel(product)}</div>
             <PriceTag theme={theme} product={product} size={13} />
           </div>
           <QtyStepper theme={theme} qty={qty} onQty={(n) => onQty(product.id, n)} />
@@ -212,11 +221,17 @@ function CartModal({ theme, store, items, onQty, onClose }) {
       {items.length > 0 && !allPriced && (
         <div style={{ fontSize: 12.5, color: theme.textMuted, padding: "10px 0 0" }}>Alguns itens têm preço sob consulta — o valor vem na resposta.</div>
       )}
-      <div style={{ margin: "14px 0 6px", fontSize: 12.5, fontWeight: 600, opacity: 0.75 }}>Seu nome (opcional)</div>
-      <input style={inputStyle(theme)} value={name} onChange={(e) => setName(e.target.value)} placeholder="Como podemos te chamar?" />
+      {items.length > 0 && (
+        <>
+          <div style={{ margin: "14px 0 6px", fontSize: 12.5, fontWeight: 600, opacity: 0.75 }}>Seu nome (opcional)</div>
+          <input style={inputStyle(theme)} value={name} onChange={(e) => setName(e.target.value)} placeholder="Como podemos te chamar?" />
+        </>
+      )}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Continuar escolhendo</Button>
-        <Button theme={theme} onClick={send} disabled={!items.length || !store.whatsapp}><MessageCircle size={15} /> Enviar pelo WhatsApp</Button>
+        {items.length > 0 && (
+          <Button theme={theme} onClick={send} disabled={!store.whatsapp}><MessageCircle size={15} /> Enviar pelo WhatsApp</Button>
+        )}
       </div>
     </Modal>
   );
