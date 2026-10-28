@@ -139,7 +139,7 @@ export default function Reports({ theme }) {
         <Card theme={theme} style={{ padding: 40, textAlign: "center" }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Nenhuma venda registrada ainda</div>
           <div style={{ fontSize: 13, color: theme.textMuted }}>
-            Assim que você registrar uma venda na aba Vendas, os relatórios de lucro e produtos mais vendidos aparecem aqui.
+            Assim que você registrar uma venda em Peças prontas, os relatórios de lucro e produtos mais vendidos aparecem aqui.
           </div>
         </Card>
       </div>

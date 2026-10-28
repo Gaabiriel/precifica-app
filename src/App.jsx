@@ -99,17 +99,18 @@ export default function App() {
 
   const logout = async () => { await supabase.auth.signOut(); };
 
+  // `group` = título da seção no menu lateral (aparece quando muda de um item pro outro)
   const TABS = [
     { id: "dashboard", label: "Visão geral", icon: LayoutDashboard },
-    { id: "materiais", label: "Materiais", icon: Boxes },
-    { id: "produtos", label: "Produtos", icon: ShoppingBag },
-    { id: "kits", label: "Kits", icon: Layers },
-    { id: "vendas", label: "Vendas", icon: ShoppingCart },
-    { id: "historico_vendas", label: "Histórico de vendas", icon: History },
-    { id: "orcamentos", label: "Orçamentos", icon: FileText },
-    { id: "relatorios", label: "Relatórios", icon: TrendingUp },
-    { id: "config", label: "Configurações", icon: Settings2 },
-    ...(isAdmin ? [{ id: "admin", label: "Admin", icon: ShieldCheck }] : []),
+    { id: "materiais", label: "Materiais", icon: Boxes, group: "Catálogo" },
+    { id: "produtos", label: "Produtos", icon: ShoppingBag, group: "Catálogo" },
+    { id: "kits", label: "Kits", icon: Layers, group: "Catálogo" },
+    { id: "vendas", label: "Peças prontas", icon: ShoppingCart, group: "Estoque e vendas" },
+    { id: "historico_vendas", label: "Saídas", icon: History, group: "Estoque e vendas" },
+    { id: "orcamentos", label: "Orçamentos", icon: FileText, group: "Estoque e vendas" },
+    { id: "relatorios", label: "Relatórios", icon: TrendingUp, group: "Análise" },
+    { id: "config", label: "Configurações", icon: Settings2, group: "" },
+    ...(isAdmin ? [{ id: "admin", label: "Admin", icon: ShieldCheck, group: "" }] : []),
   ];
   const activeTab = TABS.find((t) => t.id === tab);
 
@@ -132,20 +133,27 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "8px 12px" }}>
-          {TABS.map((t) => {
+          {TABS.map((t, i) => {
             const Icon = t.icon; const active = tab === t.id;
+            const newGroup = i > 0 && t.group !== TABS[i - 1].group;
             return (
-              <button
-                key={t.id}
-                onClick={() => { setTab(t.id); setMobileNavOpen(false); }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 8,
-                  fontSize: 13, fontWeight: active ? 700 : 600, border: "none", cursor: "pointer", textAlign: "left",
-                  background: active ? theme.primary : "transparent", color: active ? "#fff" : theme.textMuted,
-                }}
-              >
-                <Icon size={16} /> {t.label}
-              </button>
+              <React.Fragment key={t.id}>
+                {newGroup && (t.group ? (
+                  <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: theme.textMuted, opacity: 0.7, padding: "14px 12px 4px" }}>{t.group}</div>
+                ) : (
+                  <div style={{ borderTop: `1px solid ${theme.border}`, margin: "10px 12px 6px" }} />
+                ))}
+                <button
+                  onClick={() => { setTab(t.id); setMobileNavOpen(false); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 8,
+                    fontSize: 13, fontWeight: active ? 700 : 600, border: "none", cursor: "pointer", textAlign: "left",
+                    background: active ? theme.primary : "transparent", color: active ? "#fff" : theme.textMuted,
+                  }}
+                >
+                  <Icon size={16} /> {t.label}
+                </button>
+              </React.Fragment>
             );
           })}
         </div>
