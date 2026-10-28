@@ -1,6 +1,7 @@
 -- PASSO 2: desconta de verdade (rode o preview_materials_deduction.sql antes).
 -- Um único comando: tira os materiais do estoque e marca os produtos como
 -- descontados (materials_deducted = true), pra não descontar de novo.
+-- Material que ficaria negativo vai pra 0 (recontar esses na mão depois).
 with pending as (
   select p.id, p.stock_qty
   from public.products p
@@ -18,7 +19,7 @@ usage as (
 ),
 upd_materials as (
   update public.materials m
-  set stock = round(m.stock - u.qty, 3)
+  set stock = greatest(0, round(m.stock - u.qty, 3))  -- não deixa ficar negativo
   from usage u
   where m.id = u.material_id
   returning m.id
