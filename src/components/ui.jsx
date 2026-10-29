@@ -248,8 +248,21 @@ export function MaterialUsageList({ theme, usage }) {
  * Caixa do cadastro de produto/kit que mostra quanto de cada material vai
  * sair do estoque ao salvar, com a opção de não descontar.
  */
-export function MaterialDeductionBox({ theme, usage, units, checked, onChange }) {
-  if (!usage.length) return null;
+export function MaterialDeductionBox({ theme, usage, units, checked, onChange, hasMaterials, stock }) {
+  if (!usage.length) {
+    if (!hasMaterials) return null;
+    const msg = units > 0
+      ? "Os materiais dessa ficha são antigos (sem estoque controlado), então não há o que descontar."
+      : Number(stock) > 0
+        ? "Os materiais das peças em estoque já foram descontados. Se aumentar a quantidade em estoque, o aumento é descontado."
+        : "Preencha a \"Quantidade em estoque\" (peças prontas) pra descontar os materiais delas do estoque.";
+    return (
+      <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 10, padding: "10px 12px", margin: "0 0 14px", background: theme.surface }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Descontar materiais do estoque</div>
+        <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.45 }}>{msg}</div>
+      </div>
+    );
+  }
   return (
     <div style={{ border: `1px solid ${checked ? theme.primary : theme.border}`, borderRadius: 10, padding: "10px 12px", margin: "0 0 14px", background: theme.surface }}>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: checked ? 8 : 0 }}>

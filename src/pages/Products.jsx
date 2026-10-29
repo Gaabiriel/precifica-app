@@ -383,7 +383,7 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
       })}
       <Button theme={theme} variant="ghost" onClick={addBomLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar material</Button>
 
-      <MaterialDeductionBox theme={theme} usage={usage} units={deductUnits} checked={deduct} onChange={setDeduct} />
+      <MaterialDeductionBox theme={theme} usage={usage} units={deductUnits} checked={deduct} onChange={setDeduct} hasMaterials={(form.bom || []).length > 0} stock={form.stock_qty} />
       <CatalogFields theme={theme} form={form} set={set} />
 
       <Field
@@ -444,7 +444,7 @@ function DuplicateModal({ theme, source, materials, onClose, onConfirm }) {
       <Field label="Quantidade em estoque">
         <input type="number" min={0} style={inputStyle(theme)} value={stockQty} onChange={(e) => setStockQty(Math.max(0, parseFloat(e.target.value) || 0))} />
       </Field>
-      <MaterialDeductionBox theme={theme} usage={usage} units={stockQty} checked={deduct} onChange={setDeduct} />
+      <MaterialDeductionBox theme={theme} usage={usage} units={stockQty} checked={deduct} onChange={setDeduct} hasMaterials={(source.bom || []).length > 0} stock={stockQty} />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button theme={theme} onClick={submit} disabled={saving}><Copy size={14} /> {saving ? "Duplicando…" : "Duplicar"}</Button>

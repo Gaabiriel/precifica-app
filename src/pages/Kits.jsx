@@ -374,7 +374,7 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
       })}
       <Button theme={theme} variant="ghost" onClick={addBomLine} style={{ marginBottom: 16 }}><Plus size={13} /> Adicionar material extra</Button>
 
-      <MaterialDeductionBox theme={theme} usage={usage} units={deductUnits} checked={deduct} onChange={setDeduct} />
+      <MaterialDeductionBox theme={theme} usage={usage} units={deductUnits} checked={deduct} onChange={setDeduct} hasMaterials={(form.bom || []).length > 0} stock={form.stock_qty} />
       <CatalogFields theme={theme} form={form} set={set} />
 
       <Field
@@ -465,7 +465,7 @@ function DuplicateKitModal({ theme, source, products, materials, onClose, onConf
         </>
       )}
 
-      <MaterialDeductionBox theme={theme} usage={usage} units={stockQty} checked={deduct} onChange={setDeduct} />
+      <MaterialDeductionBox theme={theme} usage={usage} units={stockQty} checked={deduct} onChange={setDeduct} hasMaterials={(source.bom || []).length > 0} stock={stockQty} />
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>
