@@ -34,7 +34,41 @@ function loadLogoAsset(url) {
     );
 }
 
-function buildQuotePdf({ client_name, client_contact, created_at, valid_until, notes, items, total, logo }) {
+const thumbCache = new Map();
+/** Foto do produto recortada em quadrado e reduzida, pronta pro jsPDF (null se não carregar). */
+function loadThumb(url) {
+  if (!thumbCache.has(url)) {
+    thumbCache.set(url, fetch(url)
+      .then((res) => { if (!res.ok) throw new Error(res.statusText); return res.blob(); })
+      .then((blob) => new Promise((resolve, reject) => {
+        const src = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          const size = 240;
+          const side = Math.min(img.naturalWidth, img.naturalHeight);
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+          URL.revokeObjectURL(src);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.onerror = () => { URL.revokeObjectURL(src); reject(new Error("imagem inválida")); };
+        img.src = src;
+      }))
+      .catch(() => { thumbCache.delete(url); return null; }));
+  }
+  return thumbCache.get(url);
+}
+
+const PDF_PHOTO_MM = 20;
+
+async function buildQuotePdf({ client_name, client_contact, created_at, valid_until, notes, items, total, logo }) {
+  const thumbs = await Promise.all(items.map((it) => (it.image_url ? loadThumb(it.image_url) : null)));
+  const withPhotos = thumbs.some(Boolean);
+  const photoCol = withPhotos ? [""] : [];
   const doc = new jsPDF();
   let y = 18;
   if (logo) {
@@ -55,11 +89,21 @@ function buildQuotePdf({ client_name, client_contact, created_at, valid_until, n
 
   autoTable(doc, {
     startY: y + 6,
-    head: [["Produto", "Qtd", "Preço unit.", "Subtotal"]],
-    body: items.map((it) => [it.name, it.qty, brl(it.unit_price), brl(it.unit_price * it.qty)]),
-    foot: [["", "", "Total", brl(total)]],
+    head: [[...(withPhotos ? ["Foto"] : []), "Produto", "Qtd", "Preço unit.", "Subtotal"]],
+    body: items.map((it) => [...photoCol, it.name, it.qty, brl(it.unit_price), brl(it.unit_price * it.qty)]),
+    foot: [[...photoCol, "", "", "Total", brl(total)]],
     theme: "grid",
     headStyles: { fillColor: [122, 92, 66] },
+    ...(withPhotos && {
+      bodyStyles: { minCellHeight: PDF_PHOTO_MM + 4, valign: "middle" },
+      columnStyles: { 0: { cellWidth: PDF_PHOTO_MM + 4 } },
+      didDrawCell: (data) => {
+        const thumb = thumbs[data.row.index];
+        if (data.section === "body" && data.column.index === 0 && thumb) {
+          doc.addImage(thumb, "JPEG", data.cell.x + 2, data.cell.y + 2, PDF_PHOTO_MM, PDF_PHOTO_MM);
+        }
+      },
+    }),
   });
 
   if (notes) {
@@ -91,6 +135,7 @@ function buildWhatsappMessage({ client_name, items, total, valid_until, notes, o
   lines.push(`💰 *Total: ${brl(total)}*`);
   if (valid_until) lines.push(`📅 Válido até: ${fmtDate(valid_until)}`);
   if (notes) lines.push(`📝 ${notes}`);
+  if (items.some((it) => it.image_url)) lines.push("📎 Te envio também o PDF com as fotos das peças.");
   lines.push("");
   lines.push("Qualquer dúvida, é só chamar! 😊");
   if (ownerName) lines.push(`— ${ownerName}`);
@@ -101,6 +146,23 @@ function sendWhatsapp(quoteLike) {
   const digits = phoneDigits(quoteLike.client_contact);
   const text = buildWhatsappMessage(quoteLike);
   window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, "_blank");
+}
+
+function usePdfDownload() {
+  const [busy, setBusy] = useState(false);
+  const download = async (quoteLike) => {
+    setBusy(true);
+    try { await buildQuotePdf(quoteLike); } finally { setBusy(false); }
+  };
+  return [busy, download];
+}
+
+function QuoteThumb({ theme, url, size = 36 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: 7, overflow: "hidden", background: theme.surfaceAlt, border: `1px solid ${theme.border}`, flexShrink: 0 }}>
+      {url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+    </div>
+  );
 }
 
 export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
@@ -143,6 +205,12 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     () => (settings ? allProducts.map((p) => ({ product: p, calc: computeProductCost(p, materials, allProducts, settings) })) : []),
     [allProducts, materials, settings]
   );
+  const imageOf = (productId) => {
+    const p = allProducts.find((x) => x.id === productId);
+    return p?.image_urls?.[0] || p?.image_url || null;
+  };
+  const withImages = (list) => (list || []).map((it) => ({ ...it, image_url: imageOf(it.product_id) }));
+  const [pdfBusy, downloadPdf] = usePdfDownload();
   const priceOf = (productId) => productCosts.find((p) => p.product.id === productId)?.calc.finalPrice || 0;
 
   // cada item guarda o próprio unit_price: vem do preço do produto, mas pode ser
@@ -181,13 +249,13 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     created_at: editingQuote?.created_at || Date.now(),
     valid_until: validUntil || null,
     notes,
-    items: rows.map((r) => ({ product_id: r.product_id, name: r.name, qty: r.qty, unit_price: r.unitPrice })),
+    items: withImages(rows.map((r) => ({ product_id: r.product_id, name: r.name, qty: r.qty, unit_price: r.unitPrice }))),
     total,
     ownerName,
     logo: logoAsset,
   });
 
-  const generatePdf = () => buildQuotePdf(currentQuoteData());
+  const generatePdf = () => downloadPdf(currentQuoteData());
   const shareWhatsapp = () => sendWhatsapp(currentQuoteData());
 
   const saveQuote = async () => {
@@ -236,6 +304,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
 
         {rows.length > 0 && (
           <div style={{ display: "flex", gap: 6, marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: theme.textMuted }}>
+            <span style={{ width: 36 }} />
             <span style={{ flex: 3 }}>Produto</span>
             <span style={{ flex: 1 }}>Qtd</span>
             <span style={{ flex: 1.3 }}>Preço unit.</span>
@@ -245,6 +314,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
         )}
         {rows.map((r, idx) => (
           <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+            <QuoteThumb theme={theme} url={imageOf(r.product_id)} />
             <select style={{ ...inputStyle(theme), flex: 3, minWidth: 0 }} value={r.product_id} onChange={(e) => changeItemProduct(idx, e.target.value)}>
               {!products.some((p) => p.id === r.product_id) && <option value={r.product_id}>{r.name}</option>}
               {products.map((p) => <option key={p.id} value={p.id}>{productLabel(p)}</option>)}
@@ -261,7 +331,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
         <Row theme={theme} label="Total do orçamento" value={brl(total)} bold tone={theme.primary} />
 
         <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-          <Button theme={theme} variant="soft" onClick={generatePdf} disabled={!rows.length}><FileDown size={14} /> Baixar PDF</Button>
+          <Button theme={theme} variant="soft" onClick={generatePdf} disabled={!rows.length || pdfBusy}>{pdfBusy ? <Spinner theme={theme} /> : <FileDown size={14} />} {pdfBusy ? "Gerando PDF…" : "Baixar PDF"}</Button>
           <Button theme={theme} variant="soft" style={{ background: "#E7F7EE", color: "#1D8A4C" }} onClick={shareWhatsapp} disabled={!rows.length}><MessageCircle size={14} /> Enviar por WhatsApp</Button>
           <Button theme={theme} onClick={saveQuote} disabled={saving || !rows.length}><FileText size={14} /> {editingQuote ? "Salvar alterações" : "Salvar orçamento"}</Button>
         </div>
@@ -318,7 +388,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
       </Card>
 
       {detailQuote && (
-        <QuoteDetailModal theme={theme} quote={{ ...detailQuote, ownerName, logo: logoAsset }} logoUrl={logoUrl} onClose={() => setDetailQuote(null)} onEdit={() => startEdit(detailQuote)} />
+        <QuoteDetailModal theme={theme} quote={{ ...detailQuote, items: withImages(detailQuote.items), ownerName, logo: logoAsset }} logoUrl={logoUrl} onClose={() => setDetailQuote(null)} onEdit={() => startEdit(detailQuote)} />
       )}
     </div>
   );
@@ -326,6 +396,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
 
 function QuoteDetailModal({ theme, quote, logoUrl, onClose, onEdit }) {
   const items = quote.items || [];
+  const [pdfBusy, downloadPdf] = usePdfDownload();
   return (
     <Modal theme={theme} title={`Orçamento — ${quote.client_name}`} onClose={onClose} width={520}>
       {logoUrl && <img src={logoUrl} alt="" style={{ height: 32, maxWidth: 120, objectFit: "contain", marginBottom: 10 }} />}
@@ -339,8 +410,10 @@ function QuoteDetailModal({ theme, quote, logoUrl, onClose, onEdit }) {
         <span>Produto</span><span>Qtd</span><span>Preço unit.</span><span style={{ textAlign: "right" }}>Subtotal</span>
       </div>
       {items.map((it, idx) => (
-        <div key={idx} style={{ display: "grid", gridTemplateColumns: "2fr 0.6fr 1fr 1fr", padding: "9px 0", fontSize: 13, borderBottom: `1px solid ${theme.border}` }}>
-          <span>{it.name}</span>
+        <div key={idx} style={{ display: "grid", gridTemplateColumns: "2fr 0.6fr 1fr 1fr", alignItems: "center", padding: "9px 0", fontSize: 13, borderBottom: `1px solid ${theme.border}` }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <QuoteThumb theme={theme} url={it.image_url} size={30} /> {it.name}
+          </span>
           <span>{it.qty}</span>
           <span>{brl(it.unit_price)}</span>
           <span style={{ textAlign: "right" }}>{brl(it.unit_price * it.qty)}</span>
@@ -362,7 +435,7 @@ function QuoteDetailModal({ theme, quote, logoUrl, onClose, onEdit }) {
         <Button theme={theme} variant="ghost" onClick={onClose}>Fechar</Button>
         <Button theme={theme} variant="soft" onClick={onEdit}><Pencil size={14} /> Editar</Button>
         <Button theme={theme} variant="soft" style={{ background: "#E7F7EE", color: "#1D8A4C" }} onClick={() => sendWhatsapp(quote)} disabled={!items.length}><MessageCircle size={14} /> WhatsApp</Button>
-        <Button theme={theme} onClick={() => buildQuotePdf(quote)} disabled={!items.length}><FileDown size={14} /> Baixar PDF</Button>
+        <Button theme={theme} onClick={() => downloadPdf(quote)} disabled={!items.length || pdfBusy}>{pdfBusy ? <Spinner theme={theme} /> : <FileDown size={14} />} {pdfBusy ? "Gerando PDF…" : "Baixar PDF"}</Button>
       </div>
     </Modal>
   );
