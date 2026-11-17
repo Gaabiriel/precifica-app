@@ -8,6 +8,8 @@ import { FALLBACK_THEME, SERIF } from "../theme";
 import { brl } from "../pricing.js";
 import { fetchPublicCatalog, productLabel } from "../data.js";
 
+const OTHER = "Outros"; // produtos sem categoria, quando a loja usa categorias
+
 function loadCart(slug) {
   try { return JSON.parse(localStorage.getItem(`catalogo-carrinho:${slug}`)) || {}; } catch { return {}; }
 }
@@ -20,6 +22,7 @@ export default function PublicCatalog({ slug }) {
   const [q, setQ] = useState("");
   const [cart, setCart] = useState(() => loadCart(slug)); // { productId: qty }
   const [showCart, setShowCart] = useState(false);
+  const [category, setCategory] = useState(null); // null = todas
 
   useEffect(() => {
     fetchPublicCatalog(slug).then(({ data }) => setCatalog(data || null));
@@ -42,11 +45,25 @@ export default function PublicCatalog({ slug }) {
 
   const products = catalog?.products || [];
   const byId = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
+  // o banco já devolve ordenado por categoria (sem categoria por último)
+  const categories = useMemo(() => {
+    const names = [...new Set(products.map((p) => p.category).filter(Boolean))];
+    if (names.length && products.some((p) => !p.category)) names.push(OTHER);
+    return names;
+  }, [products]);
+  const categoryOf = (p) => p.category || OTHER;
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return products;
-    return products.filter((p) => [p.name, p.color, p.main_material].some((v) => (v || "").toLowerCase().includes(needle)));
-  }, [products, q]);
+    return products.filter((p) =>
+      (!category || categoryOf(p) === category)
+      && (!needle || [p.name, p.color, p.main_material].some((v) => (v || "").toLowerCase().includes(needle))));
+  }, [products, q, category]);
+  const sections = useMemo(() => {
+    if (!categories.length) return [{ name: null, items: filtered }];
+    return categories
+      .map((name) => ({ name, items: filtered.filter((p) => categoryOf(p) === name) }))
+      .filter((sec) => sec.items.length);
+  }, [categories, filtered]);
 
   // ignora itens do carrinho que saíram do catálogo
   const cartItems = Object.entries(cart).filter(([id, qty]) => byId[id] && qty > 0).map(([id, qty]) => ({ product: byId[id], qty }));
@@ -102,11 +119,31 @@ export default function PublicCatalog({ slug }) {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 230px), 1fr))", gap: 16 }}>
-          {filtered.map((p) => (
-            <ProductCard key={p.id} theme={theme} product={p} qty={cart[p.id] || 0} onQty={(n) => setQty(p.id, n)} />
-          ))}
-        </div>
+        {categories.length > 1 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+            {[null, ...categories].map((name) => (
+              <CategoryChip key={name || "todos"} theme={theme} active={category === name} onClick={() => setCategory(name)}>
+                {name || "Todos"}
+              </CategoryChip>
+            ))}
+          </div>
+        )}
+
+        {sections.map((sec) => (
+          <section key={sec.name || "todos"}>
+            {sec.name && (
+              <h2 style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 700, margin: "18px 0 10px", display: "flex", alignItems: "baseline", gap: 8 }}>
+                {sec.name}
+                <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12.5, fontWeight: 600, color: theme.textMuted }}>{sec.items.length}</span>
+              </h2>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 230px), 1fr))", gap: 16 }}>
+              {sec.items.map((p) => (
+                <ProductCard key={p.id} theme={theme} product={p} qty={cart[p.id] || 0} onQty={(n) => setQty(p.id, n)} />
+              ))}
+            </div>
+          </section>
+        ))}
 
         {products.length === 0 && (
           <div style={{ textAlign: "center", padding: 48, color: theme.textMuted, fontSize: 14 }}>Nenhum produto no catálogo ainda.</div>
@@ -133,6 +170,16 @@ export default function PublicCatalog({ slug }) {
         <CartModal theme={theme} store={store} items={cartItems} onQty={setQty} onClose={() => setShowCart(false)} />
       )}
     </div>
+  );
+}
+
+function CategoryChip({ theme, active, onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active}
+      style={{ padding: "7px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer",
+        border: `1px solid ${active ? theme.primary : theme.border}`, background: active ? theme.primary : theme.surface, color: active ? "#fff" : theme.text }}>
+      {children}
+    </button>
   );
 }
 

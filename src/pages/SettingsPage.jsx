@@ -3,6 +3,7 @@ import { Save, Upload, X, Plus, Pencil, Trash2, Tag, Store, Copy, ExternalLink }
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, Spinner } from "../components/ui.jsx";
 import {
   fetchSettings, saveSettingsRow, updateProfileLogo, fetchCategories, saveCategory, deleteCategory,
+  fetchProductCategories, saveProductCategory, deleteProductCategory,
   syncCatalogPrices, catalogUrl, slugify, normalizeWhatsapp,
 } from "../data.js";
 import { supabase } from "../supabaseClient";
@@ -124,13 +125,37 @@ export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoU
       <CatalogCard theme={theme} form={form} set={set} dirty={dirty} onSave={handleSave} storeName={storeName} showToast={showToast} />
 
       <div style={{ marginTop: 20 }}>
-        <CategoriesCard theme={theme} nicheId={nicheId} showToast={showToast} />
+        <CategoriesCard
+          theme={theme}
+          showToast={showToast}
+          title="Categorias de produtos"
+          description="Separam os produtos na lista e no catálogo online (ex: Bolsas, Carteiras, Acessórios)."
+          placeholder="Ex: Bolsas, Carteiras, Acessórios…"
+          usedBy="Produtos"
+          load={fetchProductCategories}
+          save={(c) => saveProductCategory(ownerId, c)}
+          remove={deleteProductCategory}
+        />
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <CategoriesCard
+          theme={theme}
+          showToast={showToast}
+          title="Categorias de materiais"
+          description="Aparecem como opções ao cadastrar um material. Compartilhadas entre todos os negócios do mesmo nicho."
+          placeholder="Ex: Tecido, Aviamento, Embalagem…"
+          usedBy="Materiais"
+          load={fetchCategories}
+          save={(c) => saveCategory(nicheId, c)}
+          remove={deleteCategory}
+        />
       </div>
     </div>
   );
 }
 
-function CategoriesCard({ theme, nicheId, showToast }) {
+function CategoriesCard({ theme, showToast, title, description, placeholder, usedBy, load, save, remove }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -140,16 +165,16 @@ function CategoriesCard({ theme, nicheId, showToast }) {
 
   const reload = useCallback(async () => {
     if (loadedOnce.current) setRefreshing(true);
-    const cats = await fetchCategories();
+    const cats = await load();
     setCategories(cats);
     loadedOnce.current = true;
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [load]);
   useEffect(() => { reload(); }, [reload]);
 
   const handleSave = async (c) => {
-    const { error } = await saveCategory(nicheId, c);
+    const { error } = await save(c);
     if (error) {
       showToast(error.code === "23505" ? "Já existe uma categoria com esse nome." : "Erro ao salvar categoria.", "err");
       return;
@@ -160,7 +185,7 @@ function CategoriesCard({ theme, nicheId, showToast }) {
   };
 
   const handleDelete = async (id) => {
-    const { error } = await deleteCategory(id);
+    const { error } = await remove(id);
     setDeleteTarget(null);
     if (error) { showToast("Erro ao excluir categoria.", "err"); return; }
     showToast("Categoria removida.");
@@ -171,8 +196,8 @@ function CategoriesCard({ theme, nicheId, showToast }) {
     <Card theme={theme} style={{ overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `1px solid ${theme.border}` }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Categorias de materiais</div>
-          <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2 }}>Aparecem como opções ao cadastrar um material. Compartilhadas entre todos os negócios do mesmo nicho.</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>
+          <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2 }}>{description}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {refreshing && <Spinner theme={theme} />}
@@ -209,11 +234,11 @@ function CategoriesCard({ theme, nicheId, showToast }) {
         ))
       )}
 
-      {modal && <CategoryModal theme={theme} category={modal} onClose={() => setModal(null)} onSave={handleSave} />}
+      {modal && <CategoryModal theme={theme} category={modal} placeholder={placeholder} onClose={() => setModal(null)} onSave={handleSave} />}
       {deleteTarget && (
         <ConfirmModal
           theme={theme}
-          message={`Tem certeza que quer excluir a categoria "${deleteTarget.name}"? Materiais que usam essa categoria ficam sem categoria.`}
+          message={`Tem certeza que quer excluir a categoria "${deleteTarget.name}"? ${usedBy} que usam essa categoria ficam sem categoria.`}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => handleDelete(deleteTarget.id)}
         />
@@ -222,12 +247,12 @@ function CategoriesCard({ theme, nicheId, showToast }) {
   );
 }
 
-function CategoryModal({ theme, category, onClose, onSave }) {
+function CategoryModal({ theme, category, placeholder, onClose, onSave }) {
   const [name, setName] = useState(category.name || "");
   return (
     <Modal theme={theme} title={category.id ? "Editar categoria" : "Nova categoria"} onClose={onClose} width={360}>
       <Field label="Nome da categoria">
-        <input style={inputStyle(theme)} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Tecido, Aviamento, Embalagem…" autoFocus />
+        <input style={inputStyle(theme)} value={name} onChange={(e) => setName(e.target.value)} placeholder={placeholder} autoFocus />
       </Field>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
         <Button theme={theme} variant="ghost" onClick={onClose}>Cancelar</Button>

@@ -139,6 +139,22 @@ export async function deleteCategory(id) {
   return supabase.from("categories").delete().eq("id", id);
 }
 
+// categorias de produto: por usuário (as de material são por nicho)
+export async function fetchProductCategories() {
+  const { data } = await supabase.from("product_categories").select("*").order("name");
+  return data || [];
+}
+
+export async function saveProductCategory(ownerId, c) {
+  const payload = { name: c.name, owner_id: ownerId };
+  if (c.id) return supabase.from("product_categories").update(payload).eq("id", c.id);
+  return supabase.from("product_categories").insert(payload);
+}
+
+export async function deleteProductCategory(id) {
+  return supabase.from("product_categories").delete().eq("id", id);
+}
+
 export async function saveProduct(ownerId, nicheId, p) {
   const { bom, kitItems, niches: _n, ...rest } = p;
   const payload = { ...rest, owner_id: ownerId, niche_id: nicheId };

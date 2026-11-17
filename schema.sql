@@ -125,6 +125,18 @@ create table public.material_price_history (
 -- ----------------------------------------------------------------------------
 -- 6. PRODUTOS (ficha técnica / BOM)
 -- ----------------------------------------------------------------------------
+
+-- categorias de produto — por usuário (ex: Bolsas, Carteiras); separam os
+-- produtos na lista e no catálogo online (crud em Configurações)
+create table public.product_categories (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now(),
+  unique (owner_id, name)
+);
+create index product_categories_owner_idx on public.product_categories(owner_id);
+
 create table public.products (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
@@ -150,6 +162,7 @@ create table public.products (
   show_in_catalog boolean not null default false,   -- aparece no catálogo público
   catalog_show_price boolean not null default true,  -- false = "preço sob consulta" no catálogo
   catalog_price numeric,                             -- preço de venda gravado pelo app pro catálogo (o cálculo é feito no navegador)
+  category_id uuid references public.product_categories(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -291,6 +304,7 @@ alter table public.reminders enable row level security;
 alter table public.categories enable row level security;
 alter table public.materials enable row level security;
 alter table public.material_price_history enable row level security;
+alter table public.product_categories enable row level security;
 alter table public.products enable row level security;
 alter table public.product_materials enable row level security;
 alter table public.product_kit_items enable row level security;
@@ -337,6 +351,9 @@ create policy "price_history_insert" on public.material_price_history for insert
   with check (exists(select 1 from public.materials m where m.id = material_id and m.owner_id = auth.uid()));
 
 -- products
+create policy "product_categories_owner" on public.product_categories for all
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
 create policy "products_owner" on public.products for all
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());

@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Copy } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard, MaterialDeductionBox, CatalogFields } from "../components/ui.jsx";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard, MaterialDeductionBox, CatalogFields, CategoryField } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, saveProduct, deleteProduct, productLabel, materialUsage, unitsToDeduct, deductMaterials, syncCatalogPrices } from "../data.js";
+import { useCatalogData, saveProduct, deleteProduct, productLabel, materialUsage, unitsToDeduct, deductMaterials, syncCatalogPrices, fetchProductCategories } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -33,6 +33,8 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
+  const [categories, setCategories] = useState([]);
+  useEffect(() => { fetchProductCategories().then(setCategories); }, []);
 
   // `usage` = materiais extras do kit a descontar do estoque (vazio se não for descontar).
   const handleSave = async (k, usage) => {
@@ -200,7 +202,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
       <Pagination theme={theme} page={currentPage} totalPages={totalPages} onChange={setPage} />
 
       {modal && (
-        <KitModal theme={theme} kit={modal} materials={materials} products={products} settings={settings}
+        <KitModal theme={theme} kit={modal} materials={materials} products={products} settings={settings} categories={categories}
           onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {viewTarget && (
@@ -233,7 +235,7 @@ export default function Kits({ theme, ownerId, nicheId, showToast, maxProducts }
   );
 }
 
-function KitModal({ theme, kit, materials, products, settings, onClose, onSave }) {
+function KitModal({ theme, kit, materials, products, settings, categories, onClose, onSave }) {
   const [form, setForm] = useState({
     name: "", image_urls: [], labor_minutes: 0, dimensions: "", is_kit: true, stock_qty: 0, color: "",
     show_in_catalog: false, catalog_show_price: true,
@@ -303,6 +305,9 @@ function KitModal({ theme, kit, materials, products, settings, onClose, onSave }
           <Field label="Quantidade em estoque">
             <input type="number" min={0} style={inputStyle(theme)} value={form.stock_qty ?? 0} onChange={(e) => set("stock_qty", Math.max(0, parseFloat(e.target.value) || 0))} />
           </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <CategoryField theme={theme} categories={categories} value={form.category_id} onChange={(v) => set("category_id", v)} />
         </div>
       </div>
 

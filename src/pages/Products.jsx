@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Copy, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Layers, Package } from "lucide-react";
-import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard, MaterialDeductionBox, CatalogFields } from "../components/ui.jsx";
+import { Plus, Pencil, Trash2, Copy, ArrowUpDown, Upload, X, Lock, Eye, Ruler, Layers, Package, Tag } from "lucide-react";
+import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, Carousel, Row, Pagination, Spinner, MaterialDetailModal, Lightbox, ViewToggle, useViewMode, DataTable, Thumb, RowActions, CostSummaryCard, MaterialDeductionBox, CatalogFields, CategoryField } from "../components/ui.jsx";
 import ProductDetailModal from "../components/ProductDetailModal.jsx";
 import { brl, computeProductCost } from "../pricing.js";
 import { supabase } from "../supabaseClient";
-import { useCatalogData, saveProduct, deleteProduct, usesOldMaterial, productLabel, materialUsage, unitsToDeduct, deductMaterials, syncCatalogPrices } from "../data.js";
+import { useCatalogData, saveProduct, deleteProduct, usesOldMaterial, productLabel, materialUsage, unitsToDeduct, deductMaterials, syncCatalogPrices, fetchProductCategories } from "../data.js";
 
 const MAX_IMAGES = 5;
 const GRID_MIN_CARD = 270;
@@ -37,6 +37,10 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
+  const [categories, setCategories] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState(""); // "" = todas, "none" = sem categoria
+  useEffect(() => { fetchProductCategories().then(setCategories); }, []);
+  const categoryName = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c.name])), [categories]);
 
   // `usage` = materiais a descontar do estoque (vazio se não for descontar).
   const handleSave = async (p, usage) => {
@@ -81,6 +85,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
     const needle = q.toLowerCase();
     let list = productCosts.filter(({ product }) =>
       [product.name, product.color, product.main_material].some((v) => (v || "").toLowerCase().includes(needle))
+      && (!categoryFilter || (categoryFilter === "none" ? !product.category_id : product.category_id === categoryFilter))
     );
     const dir = sortDir === "asc" ? 1 : -1;
     const sortValue = (row) => {
@@ -96,9 +101,9 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
       return ((va || 0) - (vb || 0)) * dir;
     });
     return list;
-  }, [productCosts, q, sortField, sortDir]);
+  }, [productCosts, q, sortField, sortDir, categoryFilter]);
 
-  useEffect(() => { setPage(1); }, [q, sortField, sortDir]);
+  useEffect(() => { setPage(1); }, [q, sortField, sortDir, categoryFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -111,6 +116,13 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: 1 }}>
           <input className="toolbar-field" placeholder="Buscar produto…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 220 }} />
+          {categories.length > 0 && (
+            <select className="toolbar-field" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ ...inputStyle(theme), maxWidth: 200 }}>
+              <option value="">Todas as categorias</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="none">Sem categoria</option>
+            </select>
+          )}
           <div className="toolbar-field" style={{ display: "flex", gap: 8, maxWidth: 280, flex: "1 1 240px" }}>
             <select value={sortField} onChange={(e) => setSortField(e.target.value)} style={{ ...inputStyle(theme), flex: 1 }}>
               {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>Ordenar: {o.label}</option>)}
@@ -182,6 +194,9 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
                 {usesOldMaterial(product, materials) && <OldTag theme={theme} />}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>
+                {categoryName[product.category_id] && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}><Tag size={12} /> {categoryName[product.category_id]}</div>
+                )}
                 {product.main_material && (
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}><Layers size={12} /> {product.main_material}</div>
                 )}
@@ -221,7 +236,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
       <Pagination theme={theme} page={currentPage} totalPages={totalPages} onChange={setPage} />
 
       {modal && (
-        <ProductModal theme={theme} product={modal} materials={materials} products={products} settings={settings}
+        <ProductModal theme={theme} product={modal} materials={materials} products={products} settings={settings} categories={categories}
           onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {duplicateSource && (
@@ -254,7 +269,7 @@ export default function Products({ theme, ownerId, nicheId, showToast, maxProduc
   );
 }
 
-function ProductModal({ theme, product, materials, products, settings, onClose, onSave }) {
+function ProductModal({ theme, product, materials, products, settings, categories, onClose, onSave }) {
   const [form, setForm] = useState({
     name: "", image_urls: [], labor_minutes: 30, notes: "", dimensions: "", is_kit: false,
     main_material: "", color: "", stock_qty: 0, show_in_catalog: false, catalog_show_price: true,
@@ -330,6 +345,9 @@ function ProductModal({ theme, product, materials, products, settings, onClose, 
           <Field label="Quantidade em estoque">
             <input type="number" min={0} style={inputStyle(theme)} value={form.stock_qty ?? 0} onChange={(e) => set("stock_qty", Math.max(0, parseFloat(e.target.value) || 0))} />
           </Field>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <CategoryField theme={theme} categories={categories} value={form.category_id} onChange={(v) => set("category_id", v)} />
         </div>
       </div>
       <div style={{ marginBottom: 12 }}>

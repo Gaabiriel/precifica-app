@@ -276,6 +276,18 @@ export function MaterialDeductionBox({ theme, usage, units, checked, onChange, h
   );
 }
 
+/** Escolha da categoria no cadastro de produto/kit. */
+export function CategoryField({ theme, categories, value, onChange }) {
+  return (
+    <Field label="Categoria" hint={categories.length ? undefined : "Crie as categorias em Configurações."}>
+      <select style={inputStyle(theme)} value={value || ""} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">Sem categoria</option>
+        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+    </Field>
+  );
+}
+
 /** Opções do catálogo público no cadastro de produto/kit. */
 export function CatalogFields({ theme, form, set }) {
   const shown = !!form.show_in_catalog;
