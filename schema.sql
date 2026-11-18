@@ -63,6 +63,9 @@ create table public.settings (
   catalog_enabled boolean not null default false,  -- catálogo público ligado
   catalog_slug text,                 -- endereço do catálogo (?catalogo=<slug>); índice único em lower()
   catalog_whatsapp text,             -- WhatsApp que recebe os pedidos de orçamento (só dígitos, com 55)
+  quote_general_conditions text,     -- condições gerais fixas no fim de todo orçamento em PDF
+  quote_template_custom text,        -- modelo de pagamento "sob encomenda" ([Total], [Metade], [Nome do Cliente])
+  quote_template_ready text,         -- modelo de pagamento "pronta entrega"
   updated_at timestamptz not null default now()
 );
 
@@ -203,10 +206,12 @@ create table public.quotes (
   owner_id uuid not null references public.profiles(id) on delete cascade,
   client_name text not null,
   client_contact text,
-  items jsonb not null default '[]'::jsonb,   -- [{product_id, name, qty, unit_price}]
+  items jsonb not null default '[]'::jsonb,   -- [{product_id, name, qty, unit_price, discount_percent}]
   total numeric not null default 0,
   notes text,
   valid_until date,
+  discount_type text not null default 'percent',  -- desconto no total: 'percent' | 'value' (o de cada item fica em items[].discount_percent)
+  discount_value numeric not null default 0,
   created_at timestamptz not null default now()
 );
 

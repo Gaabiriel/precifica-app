@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Save, Upload, X, Plus, Pencil, Trash2, Tag, Store, Copy, ExternalLink } from "lucide-react";
+import { Save, Upload, X, Plus, Pencil, Trash2, Tag, Store, Copy, ExternalLink, FileText } from "lucide-react";
 import { Card, Button, Field, inputStyle, iconBtn, Modal, ConfirmModal, ActionsMenu, Spinner } from "../components/ui.jsx";
 import {
   fetchSettings, saveSettingsRow, updateProfileLogo, fetchCategories, saveCategory, deleteCategory,
@@ -123,6 +123,8 @@ export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoU
       </Card>
 
       <CatalogCard theme={theme} form={form} set={set} dirty={dirty} onSave={handleSave} storeName={storeName} showToast={showToast} />
+
+      <QuoteTextsCard theme={theme} form={form} set={set} dirty={dirty} onSave={handleSave} />
 
       <div style={{ marginTop: 20 }}>
         <CategoriesCard
@@ -315,6 +317,36 @@ function CatalogCard({ theme, form, set, dirty, onSave, storeName, showToast }) 
         </div>
       )}
 
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+        <Button theme={theme} onClick={onSave} style={{ opacity: dirty ? 1 : 0.5 }}><Save size={14} /> Salvar configurações</Button>
+      </div>
+    </Card>
+  );
+}
+
+function QuoteTextsCard({ theme, form, set, dirty, onSave }) {
+  const area = { ...inputStyle(theme), resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 };
+  return (
+    <Card theme={theme} style={{ padding: 24, marginTop: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <FileText size={16} color={theme.primary} />
+        <div style={{ fontSize: 16, fontWeight: 800 }}>Textos do orçamento</div>
+      </div>
+      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+        Linhas começando com "•" viram lista no PDF, e "Título:" numa linha sozinha vira subtítulo.
+        Nos modelos, [Total], [Metade] e [Nome do Cliente] são trocados pelos valores de cada orçamento.
+      </div>
+      <Field label="Condições gerais" hint="Aparecem em todo orçamento em PDF, num quadro no final.">
+        <textarea rows={6} style={area} value={form.quote_general_conditions || ""} onChange={(e) => set("quote_general_conditions", e.target.value)} />
+      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "4px 20px" }}>
+        <Field label="Modelo de pagamento: Sob encomenda" hint='Botão "Modelo: Sob encomenda" no orçamento.'>
+          <textarea rows={9} style={area} value={form.quote_template_custom || ""} onChange={(e) => set("quote_template_custom", e.target.value)} />
+        </Field>
+        <Field label="Modelo de pagamento: Pronta entrega" hint='Botão "Modelo: Pronta entrega" no orçamento.'>
+          <textarea rows={9} style={area} value={form.quote_template_ready || ""} onChange={(e) => set("quote_template_ready", e.target.value)} />
+        </Field>
+      </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
         <Button theme={theme} onClick={onSave} style={{ opacity: dirty ? 1 : 0.5 }}><Save size={14} /> Salvar configurações</Button>
       </div>
