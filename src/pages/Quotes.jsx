@@ -32,14 +32,14 @@ function buildWhatsappMessage(quote) {
   calc.lines.forEach((l) => lines.push(`• ${l.qty}x ${l.name} — ${brl(l.net)}${l.discount_percent > 0 ? ` (−${fmtPct(l.discount_percent)}%)` : ""}`));
   lines.push("");
   if (calc.saved > 0) {
-    lines.push(`Valor das peças: ${brl(calc.gross)}`);
+    lines.push(`Valor dos itens: ${brl(calc.gross)}`);
     lines.push(`Desconto: −${brl(calc.saved)}`);
   }
   lines.push(`💰 *Total: ${brl(calc.total)}*`);
   if (valid_until) lines.push(`📅 Válido até: ${fmtDate(valid_until)}`);
   const filledNotes = fillPlaceholders(notes, { clientName: client_name, total: calc.total }).trim();
   if (filledNotes) { lines.push(""); lines.push(filledNotes); }
-  if (items.some((it) => it.image_url)) { lines.push(""); lines.push("📎 Te envio também o PDF com as fotos das peças."); }
+  if (items.some((it) => it.image_url)) { lines.push(""); lines.push("📎 Te envio também o PDF com as fotos dos produtos."); }
   lines.push("");
   lines.push("Qualquer dúvida, é só chamar! 😊");
   if (ownerName) lines.push(`— ${ownerName}`);
@@ -76,7 +76,7 @@ function QuoteSummary({ theme, calc, discountType, discountValue }) {
   const neg = { ...line, color: "#A8693F", fontWeight: 700 };
   return (
     <div>
-      {calc.saved > 0 && <div style={line}><span>Valor das peças</span><span>{brl(calc.gross)}</span></div>}
+      {calc.saved > 0 && <div style={line}><span>Valor dos itens</span><span>{brl(calc.gross)}</span></div>}
       {calc.itemsDiscount > 0 && <div style={neg}><span>Desconto nos itens</span><span>− {brl(calc.itemsDiscount)}</span></div>}
       {calc.totalDiscount > 0 && (
         <div style={neg}><span>Desconto no total{discountType === "percent" ? ` (${fmtPct(discountValue)}%)` : ""}</span><span>− {brl(calc.totalDiscount)}</span></div>
@@ -131,6 +131,9 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     ...q,
     items: (q.items || []).map((it) => ({ ...it, image_url: imageOf(it.product_id) })),
     general_conditions: settings?.quote_general_conditions || "",
+    subtitle: settings?.quote_subtitle || "",
+    thanks: settings?.quote_thanks ?? undefined,
+    themeColors: { primary: theme.primary, accent: theme.accent },
     ownerName,
     logoUrl,
   });
@@ -306,7 +309,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
                 onChange={(e) => setDiscountValue(Math.max(0, parseFloat(e.target.value) || 0))} style={{ ...inputStyle(theme), maxWidth: 120 }} />
             </div>
             <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 6, lineHeight: 1.45 }}>
-              Pra desconto só em algumas peças, use a coluna "Desc. %". Dá pra usar os dois juntos.
+              Pra desconto só em alguns itens, use a coluna "Desc. %". Dá pra usar os dois juntos.
             </div>
           </div>
           <div style={{ flex: "0 1 320px", minWidth: 240 }}>

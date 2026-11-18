@@ -5,6 +5,26 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { brl } from "./pricing.js";
 
+export const DEFAULT_THANKS = "Agradecemos a preferência";
+
+/** Textos sugeridos (genéricos, servem pra qualquer nicho) pra Configurações → Textos do orçamento. */
+export const QUOTE_TEXT_SUGGESTIONS = {
+  quote_general_conditions:
+`• Pronta entrega: pagamento integral na confirmação do pedido. Envio em até 2 dias úteis.
+• Sob encomenda: 50% de sinal no pedido e 50% na entrega. O sinal não é devolvido em caso de desistência depois do início da produção.
+• Frete: por conta do cliente (consulte opções de envio ou retirada).
+• Orçamento válido por 7 dias.`,
+  quote_template_custom:
+`Formas de pagamento:
+• Sinal + entrega: 50% ([Metade]) no fechamento do pedido e 50% ([Metade]) na entrega.
+• À vista: [Total].
+Prazo de produção: [X] dias úteis após a confirmação do sinal.`,
+  quote_template_ready:
+`Formas de pagamento:
+• À vista: [Total].
+Envio/retirada: em até 2 dias úteis após a confirmação do pagamento.`,
+};
+
 /* -------------------- contas -------------------- */
 
 const round2 = (v) => Math.round(v * 100) / 100;
@@ -59,6 +79,52 @@ export function splitProductName(label) {
   if (m) { code = m[1].toUpperCase(); rest = m[2]; }
   const [name, ...variants] = rest.split(/\s+-\s+/);
   return { code, name: titleCase(name || ""), variant: variants.map(titleCase).join(" · ") };
+}
+
+/* -------------------- cores -------------------- */
+
+const toHex = (c) => "#" + c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("");
+const fromHex = (h) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(h || "");
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [n >> 16, (n >> 8) & 255, n & 255];
+};
+const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const lum = ([r, g, b]) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+const sat = ([r, g, b]) => { const mx = Math.max(r, g, b); return mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx; };
+const colorDist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const avgColor = (list) => list.reduce((s, c) => s.map((v, k) => v + c[k]), [0, 0, 0]).map((v) => v / list.length);
+const PAPER_RGB = [244, 239, 232];
+
+/** Cor de texto (a mais escura) e de destaque (a mais viva) da logo já sem fundo. */
+function logoColors(px) {
+  const solid = [];
+  for (let i = 0; i < px.length; i += 16) if (px[i + 3] > 200) solid.push([px[i], px[i + 1], px[i + 2]]);
+  if (solid.length < 50) return null;
+  solid.sort((a, b) => lum(a) - lum(b));
+  const ink = avgColor(solid.slice(0, Math.max(1, Math.floor(solid.length * 0.3))));
+  const vivid = solid.filter((c) => sat(c) > 0.3 && lum(c) > 0.3 && lum(c) < 0.8 && colorDist(c, ink) > 60);
+  return { ink, accent: vivid.length > solid.length * 0.05 ? avgColor(vivid) : null };
+}
+
+/** Paleta do PDF: cores da logo; sem logo (ou logo só preta), cores do tema do nicho. */
+function buildPalette(fromLogo, themeColors) {
+  let ink = fromLogo?.ink || fromHex(themeColors?.primary) || [78, 36, 51];
+  let accent = fromLogo?.accent || fromHex(themeColors?.accent) || fromHex(themeColors?.primary) || [176, 122, 85];
+  // o texto tem que ser escuro e o destaque tem que aparecer no papel claro
+  for (let i = 0; i < 8 && lum(ink) > 0.3; i++) ink = mix(ink, [0, 0, 0], 0.2);
+  for (let i = 0; i < 8 && lum(accent) > 0.62; i++) accent = mix(accent, [0, 0, 0], 0.15);
+  const P = PAPER_RGB;
+  return {
+    paper: P,
+    ink,
+    inkSoft: mix(ink, P, 0.3),
+    muted: mix(mix(ink, [128, 128, 128], 0.6), P, 0.25),
+    accent,
+    accentLight: mix(accent, P, 0.55),
+    paperDeep: mix(accent, P, 0.87),
+  };
 }
 
 /* -------------------- imagens -------------------- */
@@ -127,7 +193,7 @@ async function loadLogo(url) {
       }
     }
     const transparentEdges = edge.filter((p) => p[3] < 20).length > edge.length / 2;
-    if (transparentEdges) return { src: canvas.toDataURL("image/png"), ratio: h / w };
+    if (transparentEdges) return { src: canvas.toDataURL("image/png"), ratio: h / w, colors: logoColors(px) };
 
     const median = (k) => edge.map((p) => p[k]).sort((a, b) => a - b)[Math.floor(edge.length / 2)];
     const bg = [median(0), median(1), median(2)];
@@ -140,7 +206,7 @@ async function loadLogo(url) {
       px[i + 3] = Math.round(a * px[i + 3]);
     }
     ctx.putImageData(data, 0, 0);
-    return { src: canvas.toDataURL("image/png"), ratio: h / w };
+    return { src: canvas.toDataURL("image/png"), ratio: h / w, colors: logoColors(px) };
   } catch {
     return null;
   }
@@ -194,71 +260,72 @@ function formatPhone(contact) {
 
 const PX_PER_MM = 96 / 25.4;
 const PAGE_MARGIN_MM = 14; // espaço em cima e embaixo de cada página (a moldura fica a 7 mm)
-const PAPER = [244, 239, 232];
-const FRAME = [217, 187, 163];
 
 const CSS = `
-.qdoc { width: 794px; padding: 0 72px; background: #F4EFE8; color: #4E2433; font-family: "Jost", "Helvetica Neue", Arial, sans-serif; box-sizing: border-box; }
+.qdoc { width: 794px; padding: 0 72px; background: var(--paper); color: var(--ink); font-family: "Jost", "Helvetica Neue", Arial, sans-serif; box-sizing: border-box; }
 .qdoc * { box-sizing: border-box; margin: 0; padding: 0; }
 .qdoc .head { text-align: center; padding-top: 4px; }
 .qdoc .head img { width: 128px; display: block; margin: 0 auto; }
 .qdoc .store { font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; font-weight: 600; }
 .qdoc .orn { display: flex; align-items: center; justify-content: center; margin: 6px auto 0; width: 264px; }
-.qdoc .orn span { flex: 1; height: 1px; background: #CFA88A; }
-.qdoc .orn i { width: 6px; height: 6px; background: #B07A55; transform: rotate(45deg); margin: 0 10px; }
+.qdoc .orn span { flex: 1; height: 1px; background: var(--accent-light); }
+.qdoc .orn i { width: 6px; height: 6px; background: var(--accent); transform: rotate(45deg); margin: 0 10px; }
 .qdoc .title { text-align: center; margin: 10px 0 14px; }
 .qdoc .title h1 { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-weight: 400; font-size: 38px; line-height: 1.1; }
-.qdoc .title p { font-size: 9.5px; letter-spacing: 3.5px; text-transform: uppercase; color: #B07A55; margin-top: 6px; }
-.qdoc .meta { display: flex; border-top: 1px solid #D9BBA3; border-bottom: 1px solid #D9BBA3; padding: 11px 0; margin-bottom: 12px; }
+.qdoc .title p { font-size: 9.5px; letter-spacing: 3.5px; text-transform: uppercase; color: var(--accent); margin-top: 6px; }
+.qdoc .meta { display: flex; border-top: 1px solid var(--accent-light); border-bottom: 1px solid var(--accent-light); padding: 11px 0; margin-bottom: 12px; }
 .qdoc .meta > div { flex: 1; }
 .qdoc .meta > div:first-child { flex: 1.4; }
-.qdoc .meta > div + div { border-left: 1px solid #D9BBA3; padding-left: 22px; }
-.qdoc .lbl { display: block; font-size: 8px; letter-spacing: 2.6px; text-transform: uppercase; color: #B07A55; margin-bottom: 5px; font-weight: 500; }
+.qdoc .meta > div + div { border-left: 1px solid var(--accent-light); padding-left: 22px; }
+.qdoc .lbl { display: block; font-size: 8px; letter-spacing: 2.6px; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; font-weight: 500; }
 .qdoc .meta strong { font-family: "Cormorant Garamond", Georgia, serif; font-size: 19px; font-weight: 600; display: block; line-height: 1.2; }
-.qdoc .meta small { font-size: 11px; color: #8A7A74; }
+.qdoc .meta small { font-size: 11px; color: var(--muted); }
 .qdoc .ihead { display: flex; justify-content: space-between; padding: 0 4px 2px; }
-.qdoc .item { display: flex; align-items: center; padding: 7px 4px; border-bottom: 1px solid #E6DCD0; }
+.qdoc .item { display: flex; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--paper-deep); }
 .qdoc .item.last { border-bottom: none; }
-.qdoc .photo { width: 82px; height: 82px; border-radius: 3px; flex-shrink: 0; box-shadow: 0 6px 16px rgba(78,36,51,.18); }
-.qdoc .nophoto { width: 82px; height: 82px; border-radius: 3px; flex-shrink: 0; background: #E6DCD0; display: flex; align-items: center; justify-content: center; }
-.qdoc .nophoto i { width: 8px; height: 8px; background: #CFA88A; transform: rotate(45deg); }
+.qdoc .photo { width: 82px; height: 82px; border-radius: 3px; flex-shrink: 0; box-shadow: 0 6px 16px rgba(0,0,0,.16); }
+.qdoc .nophoto { width: 82px; height: 82px; border-radius: 3px; flex-shrink: 0; background: var(--paper-deep); display: flex; align-items: center; justify-content: center; }
+.qdoc .nophoto i { width: 8px; height: 8px; background: var(--accent-light); transform: rotate(45deg); }
 .qdoc .info { flex: 1; padding: 0 22px 0 26px; min-width: 0; }
-.qdoc .code { font-size: 8.5px; letter-spacing: 2.4px; color: #B07A55; font-weight: 500; }
+.qdoc .code { font-size: 8.5px; letter-spacing: 2.4px; color: var(--accent); font-weight: 500; }
 .qdoc .item h3 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 500; font-size: 23px; line-height: 1.15; margin: 2px 0 1px; }
-.qdoc .variant { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 15px; color: #7A5560; }
-.qdoc .qty { display: block; font-size: 10.5px; color: #8A7A74; margin-top: 5px; }
+.qdoc .variant { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 15px; color: var(--ink-soft); }
+.qdoc .qty { display: block; font-size: 10.5px; color: var(--muted); margin-top: 5px; }
 .qdoc .price { text-align: right; white-space: nowrap; }
 .qdoc .price .now { font-family: "Cormorant Garamond", Georgia, serif; font-size: 21px; font-weight: 500; display: block; }
-.qdoc .price .was { font-size: 10.5px; color: #8A7A74; text-decoration: line-through; display: block; }
-.qdoc .price .badge { display: inline-block; font-size: 8px; letter-spacing: 1.6px; font-weight: 500; color: #F4EFE8; background: #B07A55; padding: 3px 6px 2px; border-radius: 2px; margin-top: 3px; }
+.qdoc .price .was { font-size: 10.5px; color: var(--muted); text-decoration: line-through; display: block; }
+.qdoc .price .badge { display: inline-block; font-size: 8px; letter-spacing: 1.6px; font-weight: 500; color: var(--paper); background: var(--accent); padding: 3px 6px 2px; border-radius: 2px; margin-top: 3px; }
 .qdoc .totals { width: 295px; margin: 6px 0 0 auto; }
-.qdoc .sumrow { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 4px; font-size: 11px; color: #7A5560; }
-.qdoc .sumrow span:last-child { font-family: "Cormorant Garamond", Georgia, serif; font-size: 16px; color: #4E2433; }
-.qdoc .sumrow.disc span:last-child { color: #B07A55; }
-.qdoc .total { background: #4E2433; color: #F4EFE8; padding: 11px 24px; display: flex; align-items: center; justify-content: space-between; border-radius: 2px; margin-top: 6px; }
-.qdoc .total .lbl { color: #D9BBA3; margin: 0; }
+.qdoc .sumrow { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 4px; font-size: 11px; color: var(--ink-soft); }
+.qdoc .sumrow span:last-child { font-family: "Cormorant Garamond", Georgia, serif; font-size: 16px; color: var(--ink); }
+.qdoc .sumrow.disc span:last-child { color: var(--accent); }
+.qdoc .total { background: var(--ink); color: var(--paper); padding: 11px 24px; display: flex; align-items: center; justify-content: space-between; border-radius: 2px; margin-top: 6px; }
+.qdoc .total .lbl { color: var(--accent-light); margin: 0; }
 .qdoc .total strong { font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; font-weight: 500; }
-.qdoc .note { text-align: right; font-size: 10px; color: #8A7A74; margin-top: 8px; }
-.qdoc .saving { text-align: right; font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 15px; color: #B07A55; margin-top: 8px; }
-.qdoc .texts { display: flex; margin-top: 12px; padding-top: 12px; border-top: 1px solid #D9BBA3; align-items: flex-start; }
+.qdoc .note { text-align: right; font-size: 10px; color: var(--muted); margin-top: 8px; }
+.qdoc .saving { text-align: right; font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 15px; color: var(--accent); margin-top: 8px; }
+.qdoc .texts { display: flex; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--accent-light); align-items: flex-start; }
 .qdoc .texts > div { flex: 1; min-width: 0; }
 .qdoc .texts > div + div { margin-left: 26px; }
-.qdoc .box { background: #E9DFD3; padding: 13px 17px 7px; border-radius: 2px; }
-.qdoc .texts h4 { font-size: 8px; letter-spacing: 2.4px; text-transform: uppercase; color: #B07A55; font-weight: 500; margin: 8px 0 5px; }
+.qdoc .box { background: var(--paper-deep); padding: 13px 17px 7px; border-radius: 2px; }
+.qdoc .texts h4 { font-size: 8px; letter-spacing: 2.4px; text-transform: uppercase; color: var(--accent); font-weight: 500; margin: 8px 0 5px; }
 .qdoc .texts .lbl + h4, .qdoc .texts h4:first-child { margin-top: 0; }
 .qdoc .texts ul { list-style: none; margin-bottom: 4px; }
-.qdoc .texts li { position: relative; padding-left: 12px; font-size: 9.6px; line-height: 1.45; color: #7A5560; margin-bottom: 4px; }
-.qdoc .texts li::before { content: ""; position: absolute; left: 0; top: 5px; width: 4px; height: 4px; background: #B07A55; transform: rotate(45deg); }
-.qdoc .texts p { font-size: 9.8px; line-height: 1.5; color: #7A5560; margin-bottom: 5px; }
-.qdoc .texts b { color: #4E2433; font-weight: 500; }
+.qdoc .texts li { position: relative; padding-left: 12px; font-size: 9.6px; line-height: 1.45; color: var(--ink-soft); margin-bottom: 4px; }
+.qdoc .texts li::before { content: ""; position: absolute; left: 0; top: 5px; width: 4px; height: 4px; background: var(--accent); transform: rotate(45deg); }
+.qdoc .texts p { font-size: 9.8px; line-height: 1.5; color: var(--ink-soft); margin-bottom: 5px; }
+.qdoc .texts b { color: var(--ink); font-weight: 500; }
 .qdoc .box li, .qdoc .box p { font-size: 9.3px; }
 .qdoc .thanks { text-align: center; font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 20px; padding: 16px 0 4px; }
 `;
 
 function buildHtml(quote, calc, assets) {
-  const hasItemDiscount = calc.lines.some((l) => l.discount_percent > 0);
   const hasDiscount = calc.saved > 0;
   const pieces = calc.lines.reduce((s, l) => s + (Number(l.qty) || 0), 0);
+  const thanks = (quote.thanks ?? DEFAULT_THANKS).trim();
+  const pal = assets.palette;
+  const vars = [["paper", pal.paper], ["ink", pal.ink], ["ink-soft", pal.inkSoft], ["muted", pal.muted], ["accent", pal.accent],
+    ["accent-light", pal.accentLight], ["paper-deep", pal.paperDeep]].map(([k, c]) => `--${k}:${toHex(c)}`).join(";");
   const validDays = quote.valid_until ? daysBetween(quote.created_at || Date.now(), quote.valid_until) : null;
 
   const items = calc.lines.map((l, i) => {
@@ -285,13 +352,13 @@ function buildHtml(quote, calc, assets) {
   const totals = `
     <div class="totals" data-break>
       ${hasDiscount ? `
-        <div class="sumrow"><span>Valor das peças</span><span>${brl(calc.gross)}</span></div>
-        ${calc.itemsDiscount > 0 ? `<div class="sumrow disc"><span>${calc.totalDiscount > 0 ? "Desconto nas peças" : "Desconto"}</span><span>&minus; ${brl(calc.itemsDiscount)}</span></div>` : ""}
+        <div class="sumrow"><span>Valor dos itens</span><span>${brl(calc.gross)}</span></div>
+        ${calc.itemsDiscount > 0 ? `<div class="sumrow disc"><span>${calc.totalDiscount > 0 ? "Desconto nos itens" : "Desconto"}</span><span>&minus; ${brl(calc.itemsDiscount)}</span></div>` : ""}
         ${calc.totalDiscount > 0 ? `<div class="sumrow disc"><span>Desconto especial${totalPct}</span><span>&minus; ${brl(calc.totalDiscount)}</span></div>` : ""}` : ""}
       <div class="total"><span class="lbl">Total</span><strong>${brl(calc.total)}</strong></div>
       ${hasDiscount
         ? `<p class="saving">Você economiza ${brl(calc.saved)} neste orçamento</p>`
-        : `<p class="note">${pieces} ${pieces === 1 ? "peça" : "peças"}</p>`}
+        : `<p class="note">${pieces} ${pieces === 1 ? "item" : "itens"}</p>`}
     </div>`;
 
   const notes = fillPlaceholders(quote.notes, { clientName: quote.client_name, total: calc.total });
@@ -302,22 +369,22 @@ function buildHtml(quote, calc, assets) {
   const texts = notesHtml || condHtml ? `<div class="texts" data-break>${notesHtml}${condHtml}</div>` : "";
 
   return `
-    <div class="qdoc">
+    <div class="qdoc" style="${vars}">
       <div class="head">
         ${assets.logo ? `<img src="${assets.logo.src}">` : `<div class="store">${esc(quote.ownerName || "")}</div>`}
         <div class="orn"><span></span><i></i><span></span></div>
       </div>
-      <div class="title"><h1>Orçamento</h1><p>Peças feitas à mão, com carinho</p></div>
+      <div class="title"><h1>Orçamento</h1>${quote.subtitle?.trim() ? `<p>${esc(quote.subtitle.trim())}</p>` : ""}</div>
       <div class="meta">
         <div><span class="lbl">Preparado para</span><strong>${esc(quote.client_name || "—")}</strong>${quote.client_contact ? `<small>${esc(formatPhone(quote.client_contact))}</small>` : ""}</div>
         <div><span class="lbl">Emitido em</span><strong>${longDate(quote.created_at || Date.now())}</strong></div>
         ${quote.valid_until ? `<div><span class="lbl">Válido até</span><strong>${longDate(quote.valid_until)}</strong>${validDays > 0 ? `<small>${validDays} ${validDays === 1 ? "dia" : "dias"}</small>` : ""}</div>` : ""}
       </div>
-      <div class="ihead" data-break><span class="lbl">Peças</span><span class="lbl">Valor${hasItemDiscount ? "" : ""}</span></div>
+      <div class="ihead" data-break><span class="lbl">Itens</span><span class="lbl">Valor</span></div>
       ${items}
       ${totals}
       ${texts}
-      <p class="thanks" data-break data-thanks>Obrigada pela confiança</p>
+      ${thanks ? `<p class="thanks" data-break data-thanks>${esc(thanks)}</p>` : ""}
     </div>`;
 }
 
@@ -356,7 +423,8 @@ export async function downloadQuotePdf(quote) {
 
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-10000px;top:0;z-index:-1;";
-  host.innerHTML = `<style>${CSS}</style>${buildHtml(quote, calc, { logo, thumbs })}`;
+  const palette = buildPalette(logo?.colors, quote.themeColors);
+  host.innerHTML = `<style>${CSS}</style>${buildHtml(quote, calc, { logo, thumbs, palette })}`;
   document.body.appendChild(host);
   try {
     const doc = host.querySelector(".qdoc");
@@ -378,27 +446,28 @@ export async function downloadQuotePdf(quote) {
       start = end;
     }
     // o "Obrigada" sozinho numa página nova não vale uma folha a mais
-    const thanksTop = doc.querySelector("[data-thanks]").getBoundingClientRect().top - top;
+    const thanksEl = doc.querySelector("[data-thanks]");
+    const thanksTop = thanksEl ? thanksEl.getBoundingClientRect().top - top : Infinity;
     if (slices.length > 1 && slices[slices.length - 1][0] >= thanksTop - 1) slices.pop();
 
     const scale = 2;
-    const canvas = await html2canvas(doc, { scale, backgroundColor: "#F4EFE8", useCORS: true, logging: false });
+    const canvas = await html2canvas(doc, { scale, backgroundColor: toHex(palette.paper), useCORS: true, logging: false });
     const pdf = new jsPDF({ unit: "mm", format: "a4" });
     slices.forEach(([start, end], i) => {
       if (i > 0) pdf.addPage();
-      pdf.setFillColor(...PAPER);
+      pdf.setFillColor(...palette.paper.map(Math.round));
       pdf.rect(0, 0, 210, 297, "F");
       const piece = document.createElement("canvas");
       piece.width = canvas.width;
       piece.height = Math.round((end - start) * scale);
       piece.getContext("2d").drawImage(canvas, 0, Math.round(start * scale), canvas.width, piece.height, 0, 0, canvas.width, piece.height);
       pdf.addImage(piece.toDataURL("image/jpeg", 0.92), "JPEG", 0, PAGE_MARGIN_MM, 210, (end - start) / PX_PER_MM);
-      pdf.setDrawColor(...FRAME);
+      pdf.setDrawColor(...palette.accentLight.map(Math.round));
       pdf.setLineWidth(0.25);
       pdf.rect(7, 7, 196, 283);
       if (slices.length > 1) {
         pdf.setFontSize(7.5);
-        pdf.setTextColor(176, 122, 85);
+        pdf.setTextColor(...palette.accent.map(Math.round));
         pdf.text(`${i + 1} / ${slices.length}`, 105, 293.5, { align: "center" });
       }
     });

@@ -7,6 +7,7 @@ import {
   syncCatalogPrices, catalogUrl, slugify, normalizeWhatsapp,
 } from "../data.js";
 import { supabase } from "../supabaseClient";
+import { QUOTE_TEXT_SUGGESTIONS, DEFAULT_THANKS } from "../quotePdf.js";
 
 export default function SettingsPage({ theme, ownerId, nicheId, showToast, logoUrl, onLogoChange, storeName }) {
   const [settings, setSettings] = useState(null);
@@ -326,6 +327,13 @@ function CatalogCard({ theme, form, set, dirty, onSave, storeName, showToast }) 
 
 function QuoteTextsCard({ theme, form, set, dirty, onSave }) {
   const area = { ...inputStyle(theme), resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 };
+  // campo vazio: oferece um texto pronto (genérico) pra começar
+  const suggest = (key) => !form[key]?.trim() && (
+    <button type="button" onClick={() => set(key, QUOTE_TEXT_SUGGESTIONS[key])}
+      style={{ border: "none", background: "transparent", color: theme.primary, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "0 0 6px", fontFamily: "inherit" }}>
+      + Usar texto sugerido
+    </button>
+  );
   return (
     <Card theme={theme} style={{ padding: 24, marginTop: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -336,16 +344,31 @@ function QuoteTextsCard({ theme, form, set, dirty, onSave }) {
         Linhas começando com "•" viram lista no PDF, e "Título:" numa linha sozinha vira subtítulo.
         Nos modelos, [Total], [Metade] e [Nome do Cliente] são trocados pelos valores de cada orçamento.
       </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "4px 20px" }}>
+        <Field label="Frase abaixo do título (opcional)" hint='Ex: "Peças feitas à mão, com carinho". Vazio = sem frase.'>
+          <input style={inputStyle(theme)} value={form.quote_subtitle || ""} onChange={(e) => set("quote_subtitle", e.target.value)} />
+        </Field>
+        <Field label="Agradecimento no final" hint="Vazio = sem agradecimento.">
+          <input style={inputStyle(theme)} value={form.quote_thanks ?? DEFAULT_THANKS} onChange={(e) => set("quote_thanks", e.target.value)} />
+        </Field>
+      </div>
+      {suggest("quote_general_conditions")}
       <Field label="Condições gerais" hint="Aparecem em todo orçamento em PDF, num quadro no final.">
         <textarea rows={6} style={area} value={form.quote_general_conditions || ""} onChange={(e) => set("quote_general_conditions", e.target.value)} />
       </Field>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "4px 20px" }}>
+        <div>
+        {suggest("quote_template_custom")}
         <Field label="Modelo de pagamento: Sob encomenda" hint='Botão "Modelo: Sob encomenda" no orçamento.'>
           <textarea rows={9} style={area} value={form.quote_template_custom || ""} onChange={(e) => set("quote_template_custom", e.target.value)} />
         </Field>
+        </div>
+        <div>
+        {suggest("quote_template_ready")}
         <Field label="Modelo de pagamento: Pronta entrega" hint='Botão "Modelo: Pronta entrega" no orçamento.'>
           <textarea rows={9} style={area} value={form.quote_template_ready || ""} onChange={(e) => set("quote_template_ready", e.target.value)} />
         </Field>
+        </div>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
         <Button theme={theme} onClick={onSave} style={{ opacity: dirty ? 1 : 0.5 }}><Save size={14} /> Salvar configurações</Button>

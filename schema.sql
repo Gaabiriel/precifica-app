@@ -66,6 +66,8 @@ create table public.settings (
   quote_general_conditions text,     -- condições gerais fixas no fim de todo orçamento em PDF
   quote_template_custom text,        -- modelo de pagamento "sob encomenda" ([Total], [Metade], [Nome do Cliente])
   quote_template_ready text,         -- modelo de pagamento "pronta entrega"
+  quote_subtitle text,               -- frase abaixo do título "Orçamento" no PDF (vazio = sem frase)
+  quote_thanks text,                 -- agradecimento no fim do PDF (null = padrão do app, '' = sem)
   updated_at timestamptz not null default now()
 );
 
