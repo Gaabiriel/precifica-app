@@ -26,8 +26,7 @@ update public.settings set
   quote_general_conditions = coalesce(quote_general_conditions,
 '• Pronta entrega: pagamento integral (Pix à vista ou Pix no Crédito). Envio em até 2 dias úteis após a confirmação.
 • Sob encomenda: 50% de sinal no pedido + 50% na entrega (Pix), ou integral no Pix no Crédito. Não há devolução do sinal em caso de desistência após a compra dos materiais ou início da produção.
-• Frete: por conta do cliente (consulte opções de envio ou retirada).
-• Orçamento válido por 7 dias.'),
+• Frete: por conta do cliente (consulte opções de envio ou retirada).'),
   quote_template_custom = coalesce(quote_template_custom,
 'Formas de pagamento:
 • Sinal + entrega (Pix): 50% ([Metade]) no fechamento do pedido, pra reservar sua vaga e os materiais, e 50% ([Metade] + frete, se houver) quando a peça estiver pronta, antes do envio/retirada.
@@ -58,3 +57,10 @@ update public.settings s set
   quote_template_ready = case when s.quote_template_ready = i.quote_template_ready then null else s.quote_template_ready end
 from izabela i
 where s.owner_id <> '62f88a4b-a969-4f1a-8150-bfd21787abee';
+
+-- a validade agora vem só do campo "Válido até" do orçamento (já vem preenchido
+-- com 7 dias): tira a linha fixa de validade das condições gerais pra não
+-- aparecer duas vezes no PDF
+update public.settings set
+  quote_general_conditions = regexp_replace(quote_general_conditions, '\n?[^\n]*Orçamento válido por[^\n]*', '', 'g')
+where quote_general_conditions ~ 'Orçamento válido por';

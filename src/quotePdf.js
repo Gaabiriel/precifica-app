@@ -12,8 +12,7 @@ export const QUOTE_TEXT_SUGGESTIONS = {
   quote_general_conditions:
 `• Pronta entrega: pagamento integral na confirmação do pedido. Envio em até 2 dias úteis.
 • Sob encomenda: 50% de sinal no pedido e 50% na entrega. O sinal não é devolvido em caso de desistência depois do início da produção.
-• Frete: por conta do cliente (consulte opções de envio ou retirada).
-• Orçamento válido por 7 dias.`,
+• Frete: por conta do cliente (consulte opções de envio ou retirada).`,
   quote_template_custom:
 `Formas de pagamento:
 • Sinal + entrega: 50% ([Metade]) no fechamento do pedido e 50% ([Metade]) na entrega.

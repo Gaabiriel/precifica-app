@@ -12,6 +12,14 @@ function fmtDate(d) {
   return date.toLocaleDateString("pt-BR");
 }
 
+// validade sugerida pra orçamento novo (dá pra mudar ou apagar no formulário)
+const DEFAULT_VALID_DAYS = 7;
+function defaultValidUntil() {
+  const d = new Date();
+  d.setDate(d.getDate() + DEFAULT_VALID_DAYS);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const fmtPct = (v) => String(Number(v) || 0).replace(".", ",");
 
 function phoneDigits(contact) {
@@ -96,7 +104,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
   const loadedQuotesOnce = useRef(false);
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
-  const [validUntil, setValidUntil] = useState("");
+  const [validUntil, setValidUntil] = useState(defaultValidUntil);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState([]);
   const [discountType, setDiscountType] = useState("percent");
@@ -156,7 +164,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
   const calc = computeQuote(quoteItems, discountType, discountValue);
 
   const resetForm = () => {
-    setClientName(""); setClientContact(""); setValidUntil(""); setNotes(""); setItems([]);
+    setClientName(""); setClientContact(""); setValidUntil(defaultValidUntil()); setNotes(""); setItems([]);
     setDiscountType("percent"); setDiscountValue(0);
     setEditingQuote(null);
   };
