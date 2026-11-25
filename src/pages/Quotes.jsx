@@ -14,11 +14,18 @@ function fmtDate(d) {
 
 // validade sugerida pra orçamento novo (dá pra mudar ou apagar no formulário)
 const DEFAULT_VALID_DAYS = 7;
-function defaultValidUntil() {
-  const d = new Date();
-  d.setDate(d.getDate() + DEFAULT_VALID_DAYS);
+// data local no formato do <input type="date"> (yyyy-mm-dd)
+function isoDay(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+const todayIso = () => isoDay(new Date());
+function addDays(iso, days) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return isoDay(d);
+}
+const daysBetweenIso = (a, b) => Math.round((new Date(`${b}T12:00:00`) - new Date(`${a}T12:00:00`)) / 86400000);
+const defaultValidUntil = () => addDays(todayIso(), DEFAULT_VALID_DAYS);
 
 const fmtPct = (v) => String(Number(v) || 0).replace(".", ",");
 
@@ -105,6 +112,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
   const [validUntil, setValidUntil] = useState(defaultValidUntil);
+  const [issuedOn, setIssuedOn] = useState(todayIso);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState([]);
   const [discountType, setDiscountType] = useState("percent");
@@ -164,7 +172,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
   const calc = computeQuote(quoteItems, discountType, discountValue);
 
   const resetForm = () => {
-    setClientName(""); setClientContact(""); setValidUntil(defaultValidUntil()); setNotes(""); setItems([]);
+    setClientName(""); setClientContact(""); setValidUntil(defaultValidUntil()); setIssuedOn(todayIso()); setNotes(""); setItems([]);
     setDiscountType("percent"); setDiscountValue(0);
     setEditingQuote(null);
   };
@@ -173,6 +181,7 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     setClientName(q.client_name || "");
     setClientContact(q.client_contact || "");
     setValidUntil(q.valid_until ? String(q.valid_until).slice(0, 10) : "");
+    setIssuedOn(q.created_at ? isoDay(new Date(q.created_at)) : todayIso());
     setNotes(q.notes || "");
     setItems((q.items || []).map((it) => ({ product_id: it.product_id, qty: it.qty, unit_price: it.unit_price, name: it.name, discount_percent: it.discount_percent || 0 })));
     setDiscountType(q.discount_type || "percent");
@@ -187,10 +196,17 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     setNotes(text);
   };
 
+  // muda a data de emissão mantendo o mesmo prazo de validade (ex.: 7 dias)
+  const changeIssuedOn = (next) => {
+    if (!next) return;
+    if (validUntil && issuedOn) setValidUntil(addDays(next, daysBetweenIso(issuedOn, validUntil)));
+    setIssuedOn(next);
+  };
+
   const currentQuoteData = () => ({
     client_name: clientName,
     client_contact: clientContact,
-    created_at: editingQuote?.created_at || Date.now(),
+    created_at: new Date(`${issuedOn || todayIso()}T12:00:00`).toISOString(),
     valid_until: validUntil || null,
     notes,
     items: quoteItems,
@@ -206,7 +222,10 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
     if (!clientName.trim() || rows.length === 0) return;
     setSaving(true);
     const { data: userData } = await supabase.auth.getUser();
-    const { created_at, ...payload } = currentQuoteData();
+    const { created_at, ...rest } = currentQuoteData();
+    // só grava a data de emissão quando ela foi mudada no formulário
+    const originalDay = editingQuote?.created_at ? isoDay(new Date(editingQuote.created_at)) : todayIso();
+    const payload = issuedOn && issuedOn !== originalDay ? { ...rest, created_at } : rest;
     const { error } = editingQuote
       ? await supabase.from("quotes").update(payload).eq("id", editingQuote.id)
       : await supabase.from("quotes").insert({ ...payload, owner_id: userData.user.id });
@@ -243,6 +262,14 @@ export default function Quotes({ theme, showToast, ownerName, logoUrl }) {
         <div style={{ display: "flex", gap: 10, maxWidth: 780, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 220px" }}><Field label="Nome do cliente"><input style={inputStyle(theme)} value={clientName} onChange={(e) => setClientName(e.target.value)} /></Field></div>
           <div style={{ flex: "1 1 220px" }}><Field label="Contato (telefone/WhatsApp)" hint="Usado pra montar o link de envio"><input style={inputStyle(theme)} value={clientContact} onChange={(e) => setClientContact(e.target.value)} placeholder="(11) 91234-5678" /></Field></div>
+          <div style={{ flex: "1 1 150px" }}>
+            <Field label="Emitido em">
+              <input type="date" style={inputStyle(theme)} value={issuedOn} onChange={(e) => changeIssuedOn(e.target.value)} />
+            </Field>
+            {issuedOn !== todayIso() && (
+              <button type="button" onClick={() => changeIssuedOn(todayIso())} style={{ marginTop: 4, background: "none", border: "none", padding: 0, color: theme.primary, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Usar a data de hoje</button>
+            )}
+          </div>
           <div style={{ flex: "1 1 150px" }}><Field label="Válido até (opcional)"><input type="date" style={inputStyle(theme)} value={validUntil} onChange={(e) => setValidUntil(e.target.value)} /></Field></div>
         </div>
 
