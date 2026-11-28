@@ -32,7 +32,7 @@ where exists (select 1 from public.profiles where id = '62f88a4b-a969-4f1a-8150-
 on conflict (owner_id, name) do nothing;
 
 -- catálogo público: agora devolve a categoria de cada produto, e ordena por
--- categoria (sem categoria por último) e depois por nome
+-- categoria (sem categoria por último) e, dentro dela, do mais novo pro mais antigo
 create or replace function public.get_public_catalog(p_slug text)
 returns jsonb
 language sql
@@ -59,7 +59,7 @@ as $$
         'in_stock', p.stock_qty > 0,
         'price', case when p.catalog_show_price then p.catalog_price end,
         'category', c.name
-      ) order by c.name nulls last, p.name, p.color)
+      ) order by c.name nulls last, p.created_at desc, p.name)
       from public.products p
       left join public.product_categories c on c.id = p.category_id
       where p.owner_id = s.owner_id and p.show_in_catalog and p.deleted_at is null

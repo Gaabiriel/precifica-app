@@ -45,7 +45,7 @@ export default function PublicCatalog({ slug }) {
 
   const products = catalog?.products || [];
   const byId = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
-  // o banco já devolve ordenado por categoria (sem categoria por último)
+  // o banco já devolve ordenado por categoria (sem categoria por último) e, dentro dela, do mais novo pro mais antigo
   const categories = useMemo(() => {
     const names = [...new Set(products.map((p) => p.category).filter(Boolean))];
     if (names.length && products.some((p) => !p.category)) names.push(OTHER);
